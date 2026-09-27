@@ -1,43 +1,5 @@
 spring:
-  application.name: nutrition-planner
-  profiles.active: openai
-  security.user:
-      password: 123456
-      name: alice
-  ai:
-    tools.observations.include-content: true
-    mcp.server:
-      name: ${spring.application.name}
-      protocol: STREAMABLE
-    # Enables the Tool Search Tool pattern, see https://www.anthropic.com/engineering/advanced-tool-use
-    chat.client.tool-search-advisor:
-      enabled: true
-      tool-index-type: lucene
-      lucene.min-score-threshold: 0.4
-  docker.compose.enabled: false
-
-management:
-  endpoints.web.exposure.include: "*"
-  otlp:
-    metrics.export.enabled: false
-    tracing.export.enabled: false
-    logging.export.enabled: false
-
-logging.level:
-  org.springaicommunity: debug
-  org.springframework.ai: debug
-
-nutrition-planner:
-  user-profiles:
-    - name: alice
-      dietary-restrictions:
-        - vegetarian
-      health-goals:
-        - weight-loss
-        - improve-energy
-      daily-calorie-target: 1800
-      allergies:
-        - nuts
-      disliked-ingredients:
-        - cilantro
-        - olives
+  application.name: sse-tutorial
+  # Each SSE stream in this tutorial is served by a background thread that mostly sleeps or waits.
+  # Virtual threads make that cheap, so we don't need to size a thread pool.
+  threads.virtual.enabled: true

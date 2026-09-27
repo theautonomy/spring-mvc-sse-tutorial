@@ -1,7 +1,0 @@
-spring:
-  ai:
-    # AI provider configuration
-    openai:
-      chat.model: ${AZURE_OPENAI_DEPLOYMENT_NAME}
-      endpoint: ${AZURE_OPENAI_ENDPOINT}
-      api-key: ${AZURE_OPENAI_API_KEY}
