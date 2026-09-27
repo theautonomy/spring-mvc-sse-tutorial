@@ -6,6 +6,48 @@ The purpose of this repo is to demo SSE with Spring MVC. It is a small Spring Bo
 
 The browser side uses no framework.
 
+## How the client and server talk
+
+SSE is one long HTTP response that the server keeps writing to. For the other direction the browser uses ordinary requests.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant C as Controller
+    participant W as Worker thread
+
+    B->>C: GET /step3 (page)
+    C-->>B: HTML
+    B->>C: POST /step3/jobs (start a job)
+    C->>W: start work in the background
+    C-->>B: HTML fragment with the stream URL
+    B->>C: GET /step3/jobs/{id}/events (new EventSource)
+    Note over C: returns an SseEmitter, the response stays open,<br/>the request thread goes back to the pool
+    loop while the job runs
+        W-->>B: event: progress, data: HTML
+    end
+    W-->>B: event: done, data: HTML
+    Note over B: es.close(), or the browser reconnects
+    W->>C: emitter.complete()
+
+    Note over B,C: If the connection drops, the browser reconnects by itself<br/>and sends Last-Event-ID (step 5)
+```
+
+- **Server → browser:** events on the stream. Any thread can send; in Spring MVC that's `emitter.send(...)`.
+- **Browser → server:** a normal `fetch` POST (start a job, post a chat message, answer a question), never the stream.
+- **Ending:** the server sends a final event and the page calls `es.close()`. SSE has no "end of stream" message, so without this the browser would keep reconnecting.
+
+### Blocking or non-blocking?
+
+Both, at different levels: **asynchronous request handling on blocking I/O.**
+
+- **Asynchronous:** returning an `SseEmitter` starts Servlet async processing. The request thread goes back to the pool right away while the response stays open, so open streams don't hold request threads.
+- **Blocking:** `emitter.send(...)` is a normal blocking write on the thread that calls it, and a slow client delays that thread. The worker threads block too, in `Thread.sleep`, database calls, or waiting for an answer.
+- **Why that's fine here:** those threads are virtual threads (`spring.threads.virtual.enabled: true`, `Thread.startVirtualThread`). A blocked virtual thread costs almost nothing, so the simple blocking style scales without reactive code.
+- **Fully non-blocking** would be Spring WebFlux, returning `Flux<ServerSentEvent<T>>`, with R2DBC instead of JDBC for the database.
+
+[TUTORIAL.md](TUTORIAL.md#what-runs-on-which-thread) shows which thread sends in each step.
+
 ## Branches
 
 Each branch is a complete, runnable version of the tutorial. They build on each other:
