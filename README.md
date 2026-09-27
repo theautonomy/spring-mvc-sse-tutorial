@@ -16,6 +16,7 @@ The browser side uses no framework. The `sse-tutorial` branch teaches the same s
 | 4 | `/step4` | A live dashboard: one stream, many named events (admin) |
 | 5 | `/step5` | A chat room: broadcast, heartbeats, `Last-Event-ID` catch-up |
 | 6 | `/step6` | Ask the user: two-way flow over SSE + POST (admin) |
+| 7 | `/step7` | Actions that depend on each other: parallel database inserts, then processing |
 
 ## Prerequisites
 

@@ -58,7 +58,7 @@
         <pre class="bg-gray-100 p-3 rounded text-xs">curl -N -u bob:password "http://localhost:8080/step5/stream?tab=curl"
 curl -N -u bob:password -H "Last-Event-ID: 3" "http://localhost:8080/step5/stream?tab=curl"   # replay after message 3
 # Posting needs the CSRF token (see step 3). The author is always the logged-in user.
-T=$(curl -s -u bob:password -c jar http://localhost:8080/step5 | grep -o 'name="_csrf" content="[^"]*"' | cut -d'"' -f4)
+T=$(curl -s -u bob:password -c jar http://localhost:8080/step5 | grep -o 'name="_csrf" content="[^"]*"' | head -1 | cut -d'"' -f4)
 curl -u bob:password -b jar -H "X-CSRF-TOKEN: $T" -d text=hello http://localhost:8080/step5/messages</pre>
     </section>
 

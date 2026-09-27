@@ -6,17 +6,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <!-- Spring Security rejects a POST without the CSRF token. Forms rendered by Thymeleaf get it as a hidden field
          automatically; fetch calls read it from here and send it as a header. -->
-    <meta name="_csrf" th:content="${_csrf.token}"/>
-    <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
+    <!-- th:if: an error page can be rendered without a token, and must not fail because of it -->
+    <meta name="_csrf" th:if="${_csrf}" th:content="${_csrf.token}"/>
+    <meta name="_csrf_header" th:if="${_csrf}" th:content="${_csrf.headerName}"/>
     <title th:text="|${title} · SSE Tutorial|">SSE Tutorial</title>
     <!-- Styling only. Every page talks to the server with the browser's own EventSource and fetch. -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         // Headers for a fetch POST: {'X-CSRF-TOKEN': '…'}
         function csrfHeaders() {
-            const header = document.querySelector('meta[name=_csrf_header]').content;
-            const token = document.querySelector('meta[name=_csrf]').content;
-            return {[header]: token};
+            const header = document.querySelector('meta[name=_csrf_header]');
+            const token = document.querySelector('meta[name=_csrf]');
+            return header && token ? {[header.content]: token.content} : {};
         }
     </script>
 </head>
@@ -32,6 +33,7 @@
     <a href="/step4" sec:authorize="hasRole('ADMIN')" class="text-sm" th:classappend="${step == 4} ? 'text-white font-semibold' : 'text-slate-400 hover:text-white'">4 Dashboard</a>
     <a href="/step5" class="text-sm" th:classappend="${step == 5} ? 'text-white font-semibold' : 'text-slate-400 hover:text-white'">5 Chat</a>
     <a href="/step6" sec:authorize="hasRole('ADMIN')" class="text-sm" th:classappend="${step == 6} ? 'text-white font-semibold' : 'text-slate-400 hover:text-white'">6 Approval</a>
+    <a href="/step7" class="text-sm" th:classappend="${step == 7} ? 'text-white font-semibold' : 'text-slate-400 hover:text-white'">7 Pipeline</a>
     <!-- th:action adds the CSRF hidden field to this form -->
     <form th:action="@{/logout}" method="post" class="ml-auto flex items-center gap-3">
         <span class="text-sm text-slate-300" sec:authentication="name">alice</span>

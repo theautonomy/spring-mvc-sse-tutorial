@@ -21,6 +21,9 @@ class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
+                        // Spring Boot renders error pages (templates/error/403.html) at /error. Let everyone reach
+                        // it, or showing "access denied" could itself be denied.
+                        .requestMatchers("/error").permitAll()
                         // Admin only: the system dashboard and production deploys. "/**" covers the page, its SSE
                         // stream and its POSTs. Protecting only the page would leave the stream open to anyone
                         // who knows its URL.

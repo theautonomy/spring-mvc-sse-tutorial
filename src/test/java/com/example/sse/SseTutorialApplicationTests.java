@@ -29,13 +29,13 @@ class SseTutorialApplicationTests {
     MockMvc mvc;
 
     @ParameterizedTest
-    @ValueSource(strings = {"/", "/step1", "/step2", "/step3", "/step5"})
+    @ValueSource(strings = {"/", "/step1", "/step2", "/step3", "/step5", "/step7"})
     void userPagesRender(String path) throws Exception {
         mvc.perform(get(path)).andExpect(status().isOk());
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/", "/step1", "/step2", "/step3", "/step4", "/step5", "/step6"})
+    @ValueSource(strings = {"/", "/step1", "/step2", "/step3", "/step4", "/step5", "/step6", "/step7"})
     @WithMockUser(username = "admin", roles = {"USER", "ADMIN"})
     void adminSeesEveryPage(String path) throws Exception {
         mvc.perform(get(path)).andExpect(status().isOk());
@@ -45,6 +45,16 @@ class SseTutorialApplicationTests {
     @ValueSource(strings = {"/step4", "/step4/stream", "/step6", "/step6/jobs/any/events"})
     void adminPagesAndStreamsAreForbiddenForUsers(String path) throws Exception {
         mvc.perform(get(path)).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void forbiddenPageShowsTheAccessDeniedPage() throws Exception {
+        // MockMvc doesn't forward to /error by itself, so render the error page the way Boot does after a 403
+        mvc.perform(get("/error").requestAttr("jakarta.servlet.error.status_code", 403)
+                        .requestAttr("jakarta.servlet.error.request_uri", "/step4")
+                        .accept(MediaType.TEXT_HTML))
+                .andExpect(status().isForbidden())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("You can't open this page")));
     }
 
     @Test

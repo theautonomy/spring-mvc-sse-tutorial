@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="en">
+<!-- Spring Boot picks this template for every 403 by its name (error/<status>.html), including the 403s that
+     Spring Security sends for URLs the user's role doesn't allow. The status code stays 403. -->
+<head th:replace="~{layout :: head('Access denied')}"></head>
+<body class="bg-gray-100 min-h-screen font-sans">
+<nav th:replace="~{layout :: nav(0)}"></nav>
+
+<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+    <section class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+        <p class="text-sm font-semibold text-red-700">403 · Access denied</p>
+        <h1 class="text-2xl font-bold text-gray-900">You can't open this page</h1>
+        <p class="text-gray-700">
+            You are logged in as <b sec:authentication="name">alice</b>, but you are not allowed to open
+            <code th:text="${path}">/step4</code>. Steps 4 and 6 are for the <b>admin</b> user only.
+        </p>
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="/" class="border border-gray-400 bg-white hover:bg-gray-50 px-4 py-1.5 rounded text-sm">Back to the start</a>
+            <!-- Logging out leads to the login page, where you can sign in as admin -->
+            <form th:action="@{/logout}" method="post">
+                <button type="submit" class="bg-slate-700 hover:bg-slate-800 text-white px-4 py-1.5 rounded text-sm">
+                    Log in as someone else
+                </button>
+            </form>
+        </div>
+    </section>
+</main>
+</body>
+</html>

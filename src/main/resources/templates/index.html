@@ -44,6 +44,10 @@
             <a href="/step6" class="font-semibold text-blue-700 hover:underline">Step 6: Ask the user</a> <span class="ml-1 text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">admin</span>
             <p class="text-sm text-gray-600">Two-way flow: the job pauses, asks a question over SSE, and continues when the answer is posted.</p>
         </li>
+        <li class="bg-white rounded-lg border border-gray-200 p-4">
+            <a href="/step7" class="font-semibold text-blue-700 hover:underline">Step 7: Actions that depend on each other</a>
+            <p class="text-sm text-gray-600">Insert records into a database on several threads, then process them only once every insert is done. <code>CompletableFuture</code> sets the order, SSE shows the progress.</p>
+        </li>
     </ol>
 </main>
 </body>

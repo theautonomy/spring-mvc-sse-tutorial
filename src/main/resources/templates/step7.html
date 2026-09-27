@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head('Step 7 · Pipeline')}"></head>
+<body class="bg-gray-100 min-h-screen font-sans">
+<nav th:replace="~{layout :: nav(7)}"></nav>
+
+<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+    <h1 class="text-2xl font-bold text-gray-900">Step 7: Actions that depend on each other</h1>
+    <p class="text-gray-700">
+        One request, two actions. Action 1 inserts 200 records into the database in 4 batches, each on its own thread.
+        Action 2 processes the records, and must not start before every batch is in. The server chains the two with
+        <code>CompletableFuture</code> and reports the progress of both over one stream.
+    </p>
+
+    <section class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+        <form id="start" class="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <button type="submit" class="border border-gray-400 bg-white hover:bg-gray-50 px-5 py-1.5 rounded text-sm">Start</button>
+            <label class="text-sm text-gray-700 flex items-center gap-1.5">
+                <input type="checkbox" name="dontWait" value="true"/> Don't wait (start processing right away)
+            </label>
+            <label class="text-sm text-gray-700 flex items-center gap-1.5">
+                <input type="checkbox" name="failBatch" value="true"/> Make batch 3 fail
+            </label>
+        </form>
+        <div id="job"></div>
+    </section>
+
+    <section class="bg-blue-50 border border-blue-200 rounded-lg p-5 text-sm text-gray-800 space-y-2">
+        <h2 class="font-semibold">What to notice</h2>
+        <ul class="list-disc pl-5 space-y-1">
+            <li>The 4 batches move at different speeds: each runs on its own virtual thread. Processing starts only
+                when the slowest one is done, because it's chained with <code>allOf(batches).thenRunAsync(process)</code>.</li>
+            <li>Tick "Don't wait": processing starts at the same moment as the inserts, finds the table still empty,
+                and is done at once with 0 records. The summary, read from the database, shows all 200 it missed.
+                With other timings it would miss only some, which is worse: the bug would come and go.</li>
+            <li>Tick "Make batch 3 fail": <code>allOf</code> completes with the error, so <code>thenRunAsync</code> never
+                runs processing. The other batches still finish, and their rows stay in the table.</li>
+            <li>The POST returns right away. Its thread only wires the actions together; the work runs on other threads,
+                and all of them send on the same emitter.</li>
+        </ul>
+    </section>
+
+    <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
+        <h2 class="font-semibold">Try it with curl</h2>
+        <pre class="bg-gray-100 p-3 rounded text-xs">T=$(curl -s -u alice:password -c jar http://localhost:8080/step7 | grep -o 'name="_csrf" content="[^"]*"' | head -1 | cut -d'"' -f4)
+curl -s -u alice:password -b jar -H "X-CSRF-TOKEN: $T" -d dontWait=true http://localhost:8080/step7/jobs   # copy the job id from data-events
+curl -N -u alice:password http://localhost:8080/step7/jobs/&lt;job id&gt;/events</pre>
+    </section>
+
+    <p class="text-sm flex justify-between">
+        <a href="/step6" class="text-blue-700 hover:underline">← Step 6 (admin)</a>
+        <a href="/" class="text-blue-700 hover:underline">Back to the start</a>
+    </p>
+</main>
+
+<script>
+    let es; // the stream of the job on screen
+
+    document.getElementById('start').addEventListener('submit', async event => {
+        event.preventDefault();
+        const response = await fetch('/step7/jobs', {method: 'POST', headers: csrfHeaders(), body: new URLSearchParams(new FormData(event.target))});
+        const container = document.getElementById('job');
+        container.innerHTML = await response.text();
+        const job = container.firstElementChild;
+
+        if (es) es.close();
+        const stream = es = new EventSource(job.dataset.events);
+        // Each event carries the complete state of its part, so replacing is enough
+        stream.addEventListener('insert', e => job.querySelector('[data-batches]').innerHTML = e.data);
+        stream.addEventListener('process', e => job.querySelector('[data-process]').innerHTML = e.data);
+        stream.addEventListener('done', e => {
+            job.querySelector('[data-done]').innerHTML = e.data;
+            stream.close();
+        });
+    });
+</script>
+</body>
+</html>

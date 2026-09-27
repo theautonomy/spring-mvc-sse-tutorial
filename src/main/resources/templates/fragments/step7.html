@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+
+<!-- Returned by POST /step7/jobs. The page reads data-events and opens that stream. -->
+<div th:fragment="job" class="border border-gray-200 rounded p-4 space-y-4"
+     th:attr="data-events=|/step7/jobs/${jobId}/events|">
+    <p class="text-xs text-gray-400" th:text="|job ${jobId}|">job id</p>
+    <p class="text-xs text-amber-700" th:if="${options.dontWait}">"Don't wait" is on: processing starts right away.</p>
+    <p class="text-xs text-amber-700" th:if="${options.failBatch}">"Make batch 3 fail" is on.</p>
+    <div>
+        <p class="text-sm font-semibold text-gray-700 mb-2">Action 1 · Insert (4 batches, one thread each)</p>
+        <div data-batches><p class="text-sm text-gray-500">Waiting for the first batch…</p></div>
+    </div>
+    <div>
+        <p class="text-sm font-semibold text-gray-700 mb-2">Action 2 · Process</p>
+        <div data-process><p class="text-sm text-gray-500"
+             th:text="${options.dontWait} ? 'Looking for records to process…' : 'Waiting for every batch to finish…'">Waiting…</p></div>
+    </div>
+    <div data-done></div>
+</div>
+
+<!-- Data of each "insert" event: the progress of every batch at that moment -->
+<div th:fragment="batches" class="space-y-2">
+    <div th:each="rows, stat : ${inserted}" class="flex items-center gap-3">
+        <span class="text-xs text-gray-600 w-16" th:text="|Batch ${stat.count}|">Batch 1</span>
+        <div class="flex-1 bg-gray-200 rounded h-2 overflow-hidden">
+            <div class="bg-slate-700 h-2 transition-all duration-300" th:style="|width: ${rows * 100 / rowsPerBatch}%|"></div>
+        </div>
+        <span class="text-xs text-gray-500 w-16 text-right" th:text="|${rows}/${rowsPerBatch}|">10/50</span>
+    </div>
+</div>
+
+<!-- Data of each "process" event -->
+<div th:fragment="process">
+    <div class="w-full bg-gray-200 rounded h-3 overflow-hidden">
+        <div class="bg-green-600 h-3 transition-all duration-300" th:style="|width: ${processed * 100 / total}%|"></div>
+    </div>
+    <p class="text-xs text-gray-600 mt-1" th:text="|${processed} of ${total} records processed|">20 of 200 records processed</p>
+</div>
+
+<!-- Data of the "done" event when the pipeline completed. The numbers come from the database. -->
+<div th:fragment="result" class="rounded p-3 text-sm"
+     th:classappend="${summary.processed == total} ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-amber-50 border border-amber-200 text-amber-900'">
+    <p>
+        Database: <b th:text="${summary.inserted}">200</b> records inserted,
+        <b th:text="${summary.processed}">200</b> processed, sum of results <b th:text="${summary.total}">10000</b>.
+    </p>
+    <p th:if="${summary.processed < total}" class="mt-1">
+        Processing started before the inserts were done, so it missed
+        <b th:text="${summary.inserted - summary.processed}">120</b> records. That's why action 2 must wait for action 1.
+    </p>
+</div>
+
+<!-- Data of the "done" event when a batch failed -->
+<div th:fragment="error" class="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
+    <p>Pipeline failed: <span th:text="${message}">reason</span></p>
+    <p class="mt-1">
+        Database: <b th:text="${summary.inserted}">180</b> of <span th:text="${total}">200</span> records inserted,
+        <b th:text="${summary.processed}">0</b> processed. Processing never started, because not every batch finished.
+        The other batches' rows stay in the table: nothing rolls them back.
+    </p>
+</div>
+
+</body>
+</html>

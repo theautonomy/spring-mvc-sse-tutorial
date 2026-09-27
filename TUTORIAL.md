@@ -1,6 +1,6 @@
 # Server-Sent Events with Spring MVC and plain JavaScript
 
-A hands-on tutorial in six steps. Each step is a page in this app with a working example, and each one adds one idea to the one before it. By the end you'll have built every SSE pattern the nutrition planner (on `main`) uses: streaming progress, HTML fragments as events, and pausing a job to ask the user a question.
+A hands-on tutorial in seven steps. Each step is a page in this app with a working example, and each one adds one idea to the one before it. By the end you'll have built every SSE pattern the nutrition planner (on `main`) uses: streaming progress, HTML fragments as events, and pausing a job to ask the user a question.
 
 The browser side uses no framework, only `EventSource` and `fetch`. Every line that talks to the server is on the page, so you can see exactly what a library like htmx would otherwise do for you. (The `sse-tutorial` branch has the same steps written with htmx.)
 
@@ -12,6 +12,8 @@ The browser side uses no framework, only `EventSource` and `fetch`. Every line t
 | 4 | [/step4](http://localhost:8080/step4) | One stream, many named events, many targets (admin only) |
 | 5 | [/step5](http://localhost:8080/step5) | Broadcast to many tabs, dead-client cleanup, heartbeats, event ids, catch-up after reconnect |
 | 6 | [/step6](http://localhost:8080/step6) | Two-way: pause a job, ask over SSE, continue on POST (admin only) |
+| 7 | [/step7](http://localhost:8080/step7) | Actions that depend on each other: parallel inserts into a database, then processing, chained with `CompletableFuture` |
+| | [What runs on which thread](#what-runs-on-which-thread) | Servlet async behind `SseEmitter`, who calls `send`, what "async" doesn't mean |
 | | [Security](#security) | Protecting pages and streams with Spring Security, USER and ADMIN roles, CSRF for `fetch` |
 
 ## Run it
@@ -24,7 +26,7 @@ The browser side uses no framework, only `EventSource` and `fetch`. Every line t
 
 Log in as **alice**, **bob** or **admin**, all with the password `password`. Every page and stream needs a login, and steps 4 and 6 need the ADMIN role (see [Security](#security)).
 
-The app needs only `spring-boot-starter-webmvc`, `spring-boot-starter-thymeleaf` and `spring-boot-starter-security`. The only thing loaded from a CDN is Tailwind, for styling (`templates/layout.html`). Each page's JavaScript is a small inline `<script>`.
+The app needs only `spring-boot-starter-webmvc`, `spring-boot-starter-thymeleaf` and `spring-boot-starter-security`, plus `spring-boot-starter-jdbc` and an in-memory H2 database for step 7. The only thing loaded from a CDN is Tailwind, for styling (`templates/layout.html`). Each page's JavaScript is a small inline `<script>`.
 
 ## SSE in one minute
 
@@ -380,6 +382,94 @@ document.getElementById('job').addEventListener('click', async event => {
 
 ---
 
+## Step 7: Actions that depend on each other
+
+**Goal:** one request, several actions, and one of them may only start when another is done.
+
+The request starts a pipeline with two actions:
+
+1. **Insert** 200 records into the database ([`schema.sql`](src/main/resources/schema.sql), H2 in memory). The work is split into 4 batches of 50, and each batch runs on its own virtual thread.
+2. **Process** the records: compute a result for each and mark it `PROCESSED`. This must wait until **every** batch is in.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant C as PipelineController
+    participant I as Insert threads (4)
+    participant P as Process thread
+    participant DB as Database
+    B->>C: POST /step7/jobs
+    C->>I: runAsync(insertBatch) × 4
+    C-->>B: job fragment (the POST is done)
+    B->>C: GET /step7/jobs/{id}/events
+    I->>DB: INSERT … (each batch at its own speed)
+    I-->>B: insert (progress of all batches)
+    Note over I,P: allOf(batches) completes when the slowest batch is done
+    P->>DB: SELECT NEW … / UPDATE … PROCESSED
+    P-->>B: process (progress)
+    P-->>B: done (summary from the database)
+```
+
+[`PipelineController`](src/main/java/com/example/sse/step7/PipelineController.java) expresses the order with `CompletableFuture`:
+
+```java
+var batches = new CompletableFuture<?>[BATCHES];
+for (int batch = 0; batch < BATCHES; batch++) {
+    int b = batch;   // a lambda needs an effectively final copy of the loop variable
+    batches[b] = CompletableFuture.runAsync(() -> insertBatch(jobId, b, …), executor);   // action 1, in parallel
+}
+CompletableFuture.allOf(batches)                                   // done when every batch is done
+        .thenRunAsync(() -> process(jobId, emitter), executor)     // action 2, only after that
+        .whenComplete((ignored, error) -> finish(jobId, …, error, emitter));   // "done" event, success or not
+```
+
+The executor is `Executors.newVirtualThreadPerTaskExecutor()`: the threads mostly wait for the database, so virtual threads are the right fit. [`RecordRepository`](src/main/java/com/example/sse/step7/RecordRepository.java) uses `JdbcClient`, and every call borrows its own connection from the pool, so the batches really do insert at the same time.
+
+**Lessons:**
+
+- **`allOf` + `thenRunAsync` is the dependency.** `allOf` completes when the slowest batch finishes. `thenRunAsync` runs processing only if that happened normally. Watch the page: processing starts only when the last batch bar is full.
+- **Try it without the wait.** "Don't wait" starts processing next to the inserts instead. It finds the table still empty and finishes at once with 0 records, and the summary (read from the database) shows all 200 missed. With other timings it would process some and miss the rest, which is worse: a bug that comes and goes.
+- **Failures skip what depends on them.** "Make batch 3 fail" throws inside batch 3. `allOf` still waits for the other batches, then completes with the error. `thenRunAsync` skips processing, and `whenComplete` receives the error (wrapped in a `CompletionException`) and sends an error `done` event. Nothing rolls back the rows the other batches inserted. A real app would use a transaction, or clean up in `whenComplete`.
+- **Every ending sends `done`.** `whenComplete` runs for success and failure alike, and completes the emitter in a `finally`. That's step 3's rule again: the browser closes on `done` and doesn't reconnect.
+- **Several threads, one emitter.** Four batch threads send on the same `SseEmitter`. A single `send` is thread-safe, but "read the current progress, render it, send it" is three steps. Without the `synchronized (emitter)` block, a thread could send an older snapshot after a newer one and a bar would jump back.
+- **Events carry the whole state of their part.** Each `insert` event contains the progress of all four batches, not just "batch 2 +10". The page only replaces `innerHTML`, and a missed or reordered event can't leave the display wrong for long.
+- **The POST doesn't wait.** `start` only wires the futures together and returns. The request thread is free again after a few milliseconds, while the work runs for several seconds.
+- **The work doesn't depend on the browser.** If the tab closes, `send` fails, the error is logged and ignored, and the pipeline still finishes its database work. Compare step 3, where the job stops when nobody is watching. Which one you want depends on the job.
+
+---
+
+## What runs on which thread
+
+**Goal:** see what "async" means for an `SseEmitter`, now that you've seen all the patterns.
+
+When a controller method returns an `SseEmitter`, Spring MVC handles the request with **Servlet async processing**:
+
+1. Tomcat calls the controller method on a request thread.
+2. Spring sees the `SseEmitter`, calls `request.startAsync()`, and the method returns. **The request thread goes back to the pool, but the response stays open.**
+3. From then on, any thread can call `emitter.send(...)` and write to that response.
+4. When the emitter ends (`complete()`, timeout or error), Spring dispatches the request once more, with dispatcher type `ASYNC`, to finish the response. That second pass goes through the filter chain again, which is why Spring Security sees it (see [Security](#security)).
+
+The tests check step 2 with `request().asyncStarted()`.
+
+**Who calls `send` in each step:**
+
+| Step | Sending thread |
+| --- | --- |
+| 1 | The request thread itself, before returning. The emitter buffers the events until async processing has started, then flushes them. |
+| 2, 4 | A virtual thread per stream (`Thread.startVirtualThread`), looping once a second |
+| 3, 6 | The job's virtual thread, started by the POST. The GET only returns the stored emitter. |
+| 5 | The request thread of whoever posts a message (the broadcast), and the `@Scheduled` heartbeat thread |
+| 6 (answer) | The POST thread completes the `CompletableFuture`. The job thread wakes up and does the sending. |
+| 7 | Four insert threads at once (one per batch), then one processing thread. The POST thread only chains the futures. |
+
+**What "async" doesn't mean:**
+
+- **`send` blocks.** It's an ordinary blocking write on whichever thread calls it. This is async request processing, not non-blocking I/O. In step 5, `broadcast` writes to each tab one after another on the POST thread, so one slow client delays that POST and every tab after it in the list. At scale you'd hand each client's sends to a queue or an executor. For fully non-blocking streams, Spring WebFlux returns a `Flux<ServerSentEvent<T>>` instead.
+- **Something has to keep each stream going.** In steps 2 and 4 that's one sleeping thread per open stream. A parked virtual thread costs almost nothing, which is why `application.yaml` sets `spring.threads.virtual.enabled: true` and the code uses `Thread.startVirtualThread`. One platform thread per client would not scale. Step 5 is cheaper still: no thread per client, just an emitter in a list.
+- **The Servlet async timeout still applies.** Tomcat's default is 30 s. Step 1 keeps that default because its stream ends right away. Every other emitter sets its own timeout: 60 s in step 2, 5 minutes for jobs and the dashboard, `0L` (none) for the chat, whose heartbeat finds dead tabs instead.
+
+---
+
 ## Security
 
 **Goal:** only logged-in users see the pages or receive events, and only admins see the admin ones.
@@ -407,6 +497,7 @@ They live in an `InMemoryUserDetailsManager` with plain-text (`{noop}`) password
 
 - **Protect the stream, not just the page.** `/step4/**` covers the page `/step4`, its stream `/step4/stream`, and for step 6 the job POSTs and the answer POST. If only `/step4` were protected, alice could still `curl -u alice:password -N …/step4/stream` and read the dashboard. The stream URL is in the page source, so hiding the page hides nothing.
 - **Hiding a link is not security.** The nav uses `sec:authorize="hasRole('ADMIN')"` so alice doesn't see links she can't use. That's only for convenience. The URL rules in `SecurityConfig` are what actually stop her.
+- **A friendly 403 page.** `templates/error/403.html` is picked up by Spring Boot by its name, for every 403, and the status stays 403. It says who you are and offers "Log in as someone else" (a logout). `/error` is `permitAll()` so showing the error can never be denied itself. A stream never shows this page: `EventSource` asks for `text/event-stream`, so the 403 comes back with an empty body.
 - **A forbidden stream fails for good.** For alice, `/step4/stream` answers 403. `EventSource` treats a non-200 response as fatal: it fires `onerror` with `readyState` 2 and never retries. That's different from a stream that ends normally, which step 1 showed is retried forever.
 - **Streams need no special rule.** `EventSource` is a same-origin GET, so the browser sends the session cookie with it, and the stream is protected by the same login as the page. You can't add an `Authorization` header to an `EventSource`, so session cookies are the simple choice. Bearer tokens would need a cookie or a query parameter instead.
 - **The async part is covered too.** `SseEmitter` finishes the request in a second, async dispatch. Spring Security sees the same authenticated session there, so nothing else needs configuring.

@@ -44,7 +44,7 @@
     <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
         <h2 class="font-semibold">Try it with curl</h2>
         <pre class="bg-gray-100 p-3 rounded text-xs"># A POST needs the CSRF token: read it from any page, and keep the session cookie it belongs to
-T=$(curl -s -u alice:password -c jar http://localhost:8080/step3 | grep -o 'name="_csrf" content="[^"]*"' | cut -d'"' -f4)
+T=$(curl -s -u alice:password -c jar http://localhost:8080/step3 | grep -o 'name="_csrf" content="[^"]*"' | head -1 | cut -d'"' -f4)
 curl -s -u alice:password -b jar -H "X-CSRF-TOKEN: $T" -d task=demo http://localhost:8080/step3/jobs   # copy the job id from data-events
 curl -N -u alice:password http://localhost:8080/step3/jobs/&lt;job id&gt;/events</pre>
     </section>
