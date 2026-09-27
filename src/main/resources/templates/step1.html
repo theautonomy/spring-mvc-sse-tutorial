@@ -40,7 +40,7 @@
 
     <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
         <h2 class="font-semibold">Try it with curl</h2>
-        <pre class="bg-gray-100 p-3 rounded text-xs">curl -N http://localhost:8080/step1/stream</pre>
+        <pre class="bg-gray-100 p-3 rounded text-xs">curl -N -u alice:password http://localhost:8080/step1/stream</pre>
         <p class="text-gray-600">You'll see the raw format: <code>data:Hello, world #1</code>, a blank line, then
             <code>event:close</code> and <code>data:bye</code>. A blank line ends each event.</p>
     </section>

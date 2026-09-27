@@ -13,9 +13,9 @@ The browser side uses no framework. The `sse-tutorial` branch teaches the same s
 | 1 | `/step1` | Hello world: wire format, `EventSource`, the reconnect gotcha |
 | 2 | `/step2` | A ticking clock: long-lived streams, named events, timeouts, cleanup |
 | 3 | `/step3` | Progress of a long task: POST starts a job, HTML fragments as events |
-| 4 | `/step4` | A live dashboard: one stream, many named events |
+| 4 | `/step4` | A live dashboard: one stream, many named events (admin) |
 | 5 | `/step5` | A chat room: broadcast, heartbeats, `Last-Event-ID` catch-up |
-| 6 | `/step6` | Ask the user: two-way flow over SSE + POST |
+| 6 | `/step6` | Ask the user: two-way flow over SSE + POST (admin) |
 
 ## Prerequisites
 
@@ -28,7 +28,7 @@ The browser side uses no framework. The `sse-tutorial` branch teaches the same s
 ./mvnw spring-boot:run
 ```
 
-Open [http://localhost:8080](http://localhost:8080). If port 8080 is taken:
+Open [http://localhost:8080](http://localhost:8080) and log in as **alice**, **bob** or **admin** (password `password` for all). Spring Security protects every page and SSE stream; steps 4 and 6 are for **admin** only. If port 8080 is taken:
 
 ```bash
 ./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8081

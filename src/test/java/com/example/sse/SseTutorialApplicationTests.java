@@ -7,25 +7,50 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@WithMockUser("alice") // every test runs logged in as a plain user (role USER), unless it says otherwise
 class SseTutorialApplicationTests {
 
     @Autowired
     MockMvc mvc;
 
     @ParameterizedTest
-    @ValueSource(strings = {"/", "/step1", "/step2", "/step3", "/step4", "/step5", "/step6"})
-    void pagesRender(String path) throws Exception {
+    @ValueSource(strings = {"/", "/step1", "/step2", "/step3", "/step5"})
+    void userPagesRender(String path) throws Exception {
         mvc.perform(get(path)).andExpect(status().isOk());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/", "/step1", "/step2", "/step3", "/step4", "/step5", "/step6"})
+    @WithMockUser(username = "admin", roles = {"USER", "ADMIN"})
+    void adminSeesEveryPage(String path) throws Exception {
+        mvc.perform(get(path)).andExpect(status().isOk());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/step4", "/step4/stream", "/step6", "/step6/jobs/any/events"})
+    void adminPagesAndStreamsAreForbiddenForUsers(String path) throws Exception {
+        mvc.perform(get(path)).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminPostsAreForbiddenForUsers() throws Exception {
+        mvc.perform(post("/step6/jobs").param("version", "1.0").with(csrf())).andExpect(status().isForbidden());
+        mvc.perform(post("/step6/jobs/any/answer").param("approved", "true").with(csrf())).andExpect(status().isForbidden());
     }
 
     @Test
@@ -41,8 +66,24 @@ class SseTutorialApplicationTests {
     }
 
     @Test
+    @WithMockUser(username = "admin", roles = {"USER", "ADMIN"})
     void unknownJobStreamIsNotFound() throws Exception {
         mvc.perform(get("/step3/jobs/does-not-exist/events")).andExpect(status().isNotFound());
         mvc.perform(get("/step6/jobs/does-not-exist/events")).andExpect(status().isNotFound());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/", "/step1", "/step2/stream", "/step4/stream", "/step5/stream?tab=x"})
+    @WithAnonymousUser
+    void pagesAndStreamsNeedALogin(String path) throws Exception {
+        mvc.perform(get(path).accept(MediaType.TEXT_HTML, MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void postsNeedTheCsrfToken() throws Exception {
+        mvc.perform(post("/step5/messages").param("text", "hi")).andExpect(status().isForbidden());
+        mvc.perform(post("/step5/messages").param("text", "hi").with(csrf())).andExpect(status().isNoContent());
     }
 }

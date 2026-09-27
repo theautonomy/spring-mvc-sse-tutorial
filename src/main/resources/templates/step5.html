@@ -7,7 +7,8 @@
 <main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
     <h1 class="text-2xl font-bold text-gray-900">Step 5: A chat room</h1>
     <p class="text-gray-700">
-        Open this page in two or more tabs. Each tab has its own stream; the server keeps all of them in a list and
+        Open this page in two browsers (or a normal and a private window), one logged in as <b>alice</b> and one as
+        <b>bob</b>. Each tab has its own stream; the server keeps all of them in a list and
         broadcasts every message to each one. Sending a message is a normal POST.
     </p>
 
@@ -21,7 +22,6 @@
         <ul class="h-64 overflow-auto border border-gray-100 rounded p-3 space-y-1 text-sm" id="messages"></ul>
 
         <form id="send" class="flex gap-2">
-            <input type="hidden" name="user" th:value="${user}"/>
             <input name="text" type="text" placeholder="Say something" autocomplete="off" required
                    class="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm"/>
             <button type="submit" class="border border-gray-400 bg-white hover:bg-gray-50 px-5 py-1.5 rounded text-sm">Send</button>
@@ -55,14 +55,16 @@
 
     <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
         <h2 class="font-semibold">Try it with curl</h2>
-        <pre class="bg-gray-100 p-3 rounded text-xs">curl -N "http://localhost:8080/step5/stream?tab=curl"
-curl -N -H "Last-Event-ID: 3" "http://localhost:8080/step5/stream?tab=curl"   # replay after message 3
-curl -d user=curl -d text=hello http://localhost:8080/step5/messages</pre>
+        <pre class="bg-gray-100 p-3 rounded text-xs">curl -N -u bob:password "http://localhost:8080/step5/stream?tab=curl"
+curl -N -u bob:password -H "Last-Event-ID: 3" "http://localhost:8080/step5/stream?tab=curl"   # replay after message 3
+# Posting needs the CSRF token (see step 3). The author is always the logged-in user.
+T=$(curl -s -u bob:password -c jar http://localhost:8080/step5 | grep -o 'name="_csrf" content="[^"]*"' | cut -d'"' -f4)
+curl -u bob:password -b jar -H "X-CSRF-TOKEN: $T" -d text=hello http://localhost:8080/step5/messages</pre>
     </section>
 
     <p class="text-sm flex justify-between">
-        <a href="/step4" class="text-blue-700 hover:underline">← Step 4</a>
-        <a href="/step6" class="text-blue-700 hover:underline">Next: Step 6 →</a>
+        <a href="/step4" class="text-blue-700 hover:underline">← Step 4 (admin)</a>
+        <a href="/step6" class="text-blue-700 hover:underline">Next: Step 6 (admin) →</a>
     </p>
 </main>
 
@@ -90,11 +92,11 @@ curl -d user=curl -d text=hello http://localhost:8080/step5/messages</pre>
     document.getElementById('send').addEventListener('submit', async event => {
         event.preventDefault();
         const form = event.target;
-        const response = await fetch('/step5/messages', {method: 'POST', body: new URLSearchParams(new FormData(form))});
+        const response = await fetch('/step5/messages', {method: 'POST', headers: csrfHeaders(), body: new URLSearchParams(new FormData(form))});
         if (response.ok) form.elements.text.value = '';
     });
 
-    document.getElementById('drop').addEventListener('click', () => fetch(chat.dataset.drop, {method: 'POST'}));
+    document.getElementById('drop').addEventListener('click', () => fetch(chat.dataset.drop, {method: 'POST', headers: csrfHeaders()}));
 </script>
 </body>
 </html>

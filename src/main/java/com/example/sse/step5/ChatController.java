@@ -16,11 +16,11 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.security.Principal;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Step 5: a chat room. Every open tab has its own stream; a message posted in one tab is broadcast to all of them.
@@ -42,8 +42,8 @@ class ChatController {
     }
 
     @GetMapping("/step5")
-    String page(Model model) {
-        model.addAttribute("user", "guest-" + ThreadLocalRandom.current().nextInt(1000, 10000));
+    String page(Principal principal, Model model) {
+        model.addAttribute("user", principal.getName());
         model.addAttribute("tab", UUID.randomUUID().toString());
         return "step5";
     }
@@ -63,9 +63,10 @@ class ChatController {
 
     @PostMapping("/step5/messages")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void post(@RequestParam String user, @RequestParam String text) {
+    void post(Principal principal, @RequestParam String text) {
+        // The author is the logged-in user, never a name the browser sends
         if (!text.isBlank()) {
-            chatRoom.post(user.isBlank() ? "anonymous" : user.strip(), text.strip());
+            chatRoom.post(principal.getName(), text.strip());
         }
     }
 

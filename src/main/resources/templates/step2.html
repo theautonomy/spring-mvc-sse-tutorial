@@ -31,7 +31,7 @@
 
     <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
         <h2 class="font-semibold">Try it with curl</h2>
-        <pre class="bg-gray-100 p-3 rounded text-xs">curl -N http://localhost:8080/step2/stream</pre>
+        <pre class="bg-gray-100 p-3 rounded text-xs">curl -N -u alice:password http://localhost:8080/step2/stream</pre>
         <p class="text-gray-600">Every second: <code>event:time</code> and <code>data:12:34:56</code>. Press Ctrl+C to leave, and watch the server log.</p>
     </section>
 

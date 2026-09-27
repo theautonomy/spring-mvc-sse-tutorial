@@ -31,6 +31,8 @@
     <section class="bg-blue-50 border border-blue-200 rounded-lg p-5 text-sm text-gray-800 space-y-2">
         <h2 class="font-semibold">What to notice</h2>
         <ul class="list-disc pl-5 space-y-1">
+            <li>This dashboard is for admins only. <code>SecurityConfig</code> protects <code>/step4/**</code>, so the stream
+                and the POSTs are protected too, not just this page. Logged in as alice, they all answer 403.</li>
             <li>The Network tab shows one <code>/step4/stream</code> request, not four. Browsers limit open connections per
                 host (6 over HTTP/1.1), so one stream with named events scales better than one stream per widget.</li>
             <li>The event name picks the listener; the listener picks how the data goes in. The gauges replace their
@@ -41,7 +43,8 @@
 
     <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
         <h2 class="font-semibold">Try it with curl</h2>
-        <pre class="bg-gray-100 p-3 rounded text-xs">curl -N http://localhost:8080/step4/stream</pre>
+        <pre class="bg-gray-100 p-3 rounded text-xs">curl -N -u admin:password http://localhost:8080/step4/stream
+curl -i -u alice:password http://localhost:8080/step4/stream   # 403: alice is not an admin</pre>
     </section>
 
     <p class="text-sm flex justify-between">

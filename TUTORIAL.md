@@ -9,9 +9,10 @@ The browser side uses no framework, only `EventSource` and `fetch`. Every line t
 | 1 | [/step1](http://localhost:8080/step1) | The wire format, `SseEmitter`, plain `EventSource`, why the browser reconnects |
 | 2 | [/step2](http://localhost:8080/step2) | Named events and `addEventListener`, long-lived streams, timeouts, cleanup |
 | 3 | [/step3](http://localhost:8080/step3) | Start a job with POST and stream its progress, HTML fragments as events, closing on `done`, errors |
-| 4 | [/step4](http://localhost:8080/step4) | One stream, many named events, many targets |
+| 4 | [/step4](http://localhost:8080/step4) | One stream, many named events, many targets (admin only) |
 | 5 | [/step5](http://localhost:8080/step5) | Broadcast to many tabs, dead-client cleanup, heartbeats, event ids, catch-up after reconnect |
-| 6 | [/step6](http://localhost:8080/step6) | Two-way: pause a job, ask over SSE, continue on POST |
+| 6 | [/step6](http://localhost:8080/step6) | Two-way: pause a job, ask over SSE, continue on POST (admin only) |
+| | [Security](#security) | Protecting pages and streams with Spring Security, USER and ADMIN roles, CSRF for `fetch` |
 
 ## Run it
 
@@ -21,7 +22,9 @@ The browser side uses no framework, only `EventSource` and `fetch`. Every line t
 ./mvnw test
 ```
 
-The app needs only `spring-boot-starter-webmvc` and `spring-boot-starter-thymeleaf`. The only thing loaded from a CDN is Tailwind, for styling (`templates/layout.html`). Each page's JavaScript is a small inline `<script>`.
+Log in as **alice**, **bob** or **admin**, all with the password `password`. Every page and stream needs a login, and steps 4 and 6 need the ADMIN role (see [Security](#security)).
+
+The app needs only `spring-boot-starter-webmvc`, `spring-boot-starter-thymeleaf` and `spring-boot-starter-security`. The only thing loaded from a CDN is Tailwind, for styling (`templates/layout.html`). Each page's JavaScript is a small inline `<script>`.
 
 ## SSE in one minute
 
@@ -377,6 +380,50 @@ document.getElementById('job').addEventListener('click', async event => {
 
 ---
 
+## Security
+
+**Goal:** only logged-in users see the pages or receive events, and only admins see the admin ones.
+
+[`SecurityConfig`](src/main/java/com/example/sse/SecurityConfig.java):
+
+```java
+http
+        .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/step4/**", "/step6/**").hasRole("ADMIN")
+                .anyRequest().hasRole("USER"))
+        .formLogin(Customizer.withDefaults())   // the built-in /login page
+        .httpBasic(Customizer.withDefaults())   // for curl -u alice:password
+        .logout(Customizer.withDefaults());
+```
+
+| User | Roles | Can use |
+| --- | --- | --- |
+| alice, bob | USER | Steps 1, 2, 3, 5 |
+| admin | USER, ADMIN | Everything, including the system dashboard (step 4) and production deploys (step 6) |
+
+They live in an `InMemoryUserDetailsManager` with plain-text (`{noop}`) passwords. That's fine for a tutorial, but never for a real app. Rules are checked in order and the first match wins, so the specific ADMIN rule comes before the catch-all.
+
+**Lessons:**
+
+- **Protect the stream, not just the page.** `/step4/**` covers the page `/step4`, its stream `/step4/stream`, and for step 6 the job POSTs and the answer POST. If only `/step4` were protected, alice could still `curl -u alice:password -N …/step4/stream` and read the dashboard. The stream URL is in the page source, so hiding the page hides nothing.
+- **Hiding a link is not security.** The nav uses `sec:authorize="hasRole('ADMIN')"` so alice doesn't see links she can't use. That's only for convenience. The URL rules in `SecurityConfig` are what actually stop her.
+- **A forbidden stream fails for good.** For alice, `/step4/stream` answers 403. `EventSource` treats a non-200 response as fatal: it fires `onerror` with `readyState` 2 and never retries. That's different from a stream that ends normally, which step 1 showed is retried forever.
+- **Streams need no special rule.** `EventSource` is a same-origin GET, so the browser sends the session cookie with it, and the stream is protected by the same login as the page. You can't add an `Authorization` header to an `EventSource`, so session cookies are the simple choice. Bearer tokens would need a cookie or a query parameter instead.
+- **The async part is covered too.** `SseEmitter` finishes the request in a second, async dispatch. Spring Security sees the same authenticated session there, so nothing else needs configuring.
+- **A logged-out stream ends for good.** When the session has expired, the reconnect gets a 302 to `/login`. `EventSource` follows it, receives HTML instead of `text/event-stream`, and closes (`readyState` 2). It does not keep retrying. A real app would notice that in `onerror` and send the user to the login page.
+- **Logging in never lands on a stream.** Spring Security remembers the request that needed a login and returns there afterwards, but it doesn't do that for `text/event-stream` requests. So if a stream is the first protected request, you still land on `/` after logging in.
+- **CSRF is on for every POST.** Forms that Thymeleaf renders with `th:action` (the logout button) get a hidden `_csrf` field automatically. `fetch` calls send the token as a header instead. `layout.html` puts it in two `<meta>` tags, and `csrfHeaders()` reads them:
+
+  ```js
+  fetch('/step3/jobs', {method: 'POST', headers: csrfHeaders(), body: new URLSearchParams(new FormData(form))});
+  ```
+
+  Without the header, the POST gets a 403. SSE itself needs no CSRF token, because the stream is a GET that changes nothing.
+- **Never trust who the browser says it is.** The chat used to post a `user` form field. Now `ChatController` takes the author from `Principal`, so a user can't post as someone else. Step 5 is more fun with alice in one browser and bob in a private window.
+- **curl needs credentials too.** GETs work with `-u alice:password`. POSTs also need a CSRF token and the session cookie it belongs to, so the "Try it with curl" boxes read the token from a page first.
+
+---
+
 ## Cheat sheet
 
 ### SSE fields
@@ -423,7 +470,7 @@ document.getElementById('job').addEventListener('click', async event => {
 
 - **Proxies buffer.** Nginx and some load balancers buffer responses, so events arrive in bursts or at the end. Turn it off (`proxy_buffering off;`, or send the `X-Accel-Buffering: no` header) and raise read timeouts above your heartbeat interval.
 - **Connection limit.** About 6 per host over HTTP/1.1, shared across tabs. Prefer one stream per page, or HTTP/2.
-- **Auth.** `EventSource` sends cookies but can't set custom headers. Session cookies work; bearer tokens in headers don't.
+- **Auth.** `EventSource` sends cookies but can't set custom headers. Session cookies work; bearer tokens in headers don't. See [Security](#security).
 - **Many instances.** In-memory registries (step 5) and job maps (steps 3 and 6) only work with one instance, or with sticky sessions. Use pub/sub or shared storage to scale out.
 
 ---

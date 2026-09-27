@@ -26,6 +26,8 @@
     <section class="bg-blue-50 border border-blue-200 rounded-lg p-5 text-sm text-gray-800 space-y-2">
         <h2 class="font-semibold">What to notice</h2>
         <ul class="list-disc pl-5 space-y-1">
+            <li>Deploying to production is for admins only. <code>SecurityConfig</code> protects <code>/step6/**</code>, so the stream
+                and the POSTs are protected too, not just this page. Logged in as alice, they all answer 403.</li>
             <li>SSE is one-way. The "two-way" part is a second channel: the answer is an ordinary
                 <code>POST /step6/jobs/{id}/answer</code>.</li>
             <li>The job thread blocks in <code>PendingQuestion.await</code> (a <code>CompletableFuture</code>).
@@ -48,7 +50,7 @@
 
     document.getElementById('start').addEventListener('submit', async event => {
         event.preventDefault();
-        const response = await fetch('/step6/jobs', {method: 'POST', body: new URLSearchParams(new FormData(event.target))});
+        const response = await fetch('/step6/jobs', {method: 'POST', headers: csrfHeaders(), body: new URLSearchParams(new FormData(event.target))});
         const container = document.getElementById('job');
         container.innerHTML = await response.text();
         const job = container.firstElementChild;
@@ -71,6 +73,7 @@
         if (!button) return;
         const response = await fetch(button.dataset.answer, {
             method: 'POST',
+            headers: csrfHeaders(),
             body: new URLSearchParams({approved: button.dataset.approved})
         });
         button.closest('[data-question]').innerHTML = await response.text();

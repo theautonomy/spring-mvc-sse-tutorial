@@ -43,13 +43,15 @@
 
     <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
         <h2 class="font-semibold">Try it with curl</h2>
-        <pre class="bg-gray-100 p-3 rounded text-xs">curl -s -d task=demo http://localhost:8080/step3/jobs   # copy the job id from data-events
-curl -N http://localhost:8080/step3/jobs/&lt;job id&gt;/events</pre>
+        <pre class="bg-gray-100 p-3 rounded text-xs"># A POST needs the CSRF token: read it from any page, and keep the session cookie it belongs to
+T=$(curl -s -u alice:password -c jar http://localhost:8080/step3 | grep -o 'name="_csrf" content="[^"]*"' | cut -d'"' -f4)
+curl -s -u alice:password -b jar -H "X-CSRF-TOKEN: $T" -d task=demo http://localhost:8080/step3/jobs   # copy the job id from data-events
+curl -N -u alice:password http://localhost:8080/step3/jobs/&lt;job id&gt;/events</pre>
     </section>
 
     <p class="text-sm flex justify-between">
         <a href="/step2" class="text-blue-700 hover:underline">← Step 2</a>
-        <a href="/step4" class="text-blue-700 hover:underline">Next: Step 4 →</a>
+        <a href="/step4" class="text-blue-700 hover:underline">Next: Step 4 (admin) →</a>
     </p>
 </main>
 
@@ -59,7 +61,7 @@ curl -N http://localhost:8080/step3/jobs/&lt;job id&gt;/events</pre>
     document.getElementById('start').addEventListener('submit', async event => {
         event.preventDefault();
         // Start the job. The response is the "job" fragment, which says where its stream is.
-        const response = await fetch('/step3/jobs', {method: 'POST', body: new URLSearchParams(new FormData(event.target))});
+        const response = await fetch('/step3/jobs', {method: 'POST', headers: csrfHeaders(), body: new URLSearchParams(new FormData(event.target))});
         const container = document.getElementById('job');
         container.innerHTML = await response.text();
         const job = container.firstElementChild;
