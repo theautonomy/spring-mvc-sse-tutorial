@@ -69,4 +69,38 @@ class WeeklyPlanTests {
         assertEquals(500, totals.get(DayOfWeek.MONDAY).calories());
         assertEquals(500, totals.get(DayOfWeek.WEDNESDAY).calories());
     }
+
+    @Test
+    void dailyNutritionTotals_sumsDuplicateDays() {
+        var meal = recipe(500, 25, 60, 12, 400);
+
+        var plan = new WeeklyPlan(
+                List.of(
+                        new WeeklyPlan.DailyPlan(DayOfWeek.MONDAY, meal, null, null),
+                        new WeeklyPlan.DailyPlan(DayOfWeek.MONDAY, null, meal, meal)));
+
+        var totals = plan.dailyNutritionTotals();
+
+        assertEquals(1, totals.size());
+        assertEquals(1500, totals.get(DayOfWeek.MONDAY).calories());
+        assertEquals(1500, plan.nutritionTotalsForDay(DayOfWeek.MONDAY).calories());
+    }
+
+    @Test
+    void dailyNutritionTotals_treatsMissingNutritionValuesAsZero() {
+        var complete = recipe(500, 25, 60, 12, 400);
+        var partial = new Recipe("Partial", List.of(), new NutritionInfo(300, null, 40.0, null, null), "", 0);
+        var noNutrition = new Recipe("None", List.of(), null, "", 0);
+
+        var plan = new WeeklyPlan(
+                List.of(new WeeklyPlan.DailyPlan(DayOfWeek.FRIDAY, complete, partial, noNutrition)));
+
+        var friday = plan.dailyNutritionTotals().get(DayOfWeek.FRIDAY);
+        assertEquals(800,   friday.calories());
+        assertEquals(25.0,  friday.proteinGrams(), 0.01);
+        assertEquals(100.0, friday.carbGrams(),    0.01);
+        assertEquals(12.0,  friday.fatGrams(),     0.01);
+        assertEquals(400,   friday.sodiumMg());
+        assertEquals(3, plan.totalMealCount());
+    }
 }

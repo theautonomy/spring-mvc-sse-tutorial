@@ -6,6 +6,7 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.lang.Nullable;
 
 import java.time.DayOfWeek;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,8 +19,9 @@ public record WeeklyPlan(List<DailyPlan> days) {
 
     @Tool(description = "Returns the total calories, protein, carbs, fat, and sodium for each day of the weekly meal plan")
     public Map<DayOfWeek, NutritionInfo> dailyNutritionTotals() {
-        var dailyNutritionTotals = days.stream().collect(Collectors.toMap(
-                DailyPlan::day, day -> nutritionTotalsForDay(day.day())
+        // distinct() because the model may return the same day more than once; nutritionTotalsForDay sums all of them
+        var dailyNutritionTotals = days.stream().map(DailyPlan::day).distinct().collect(Collectors.toMap(
+                day -> day, this::nutritionTotalsForDay, (a, _) -> a, () -> new EnumMap<>(DayOfWeek.class)
         ));
         log.info("WeeklyPlan:dailyNutritionTotals tool method finished with {}", dailyNutritionTotals);
         return dailyNutritionTotals;
@@ -27,27 +29,23 @@ public record WeeklyPlan(List<DailyPlan> days) {
 
     @Tool(description = "Returns the total calories, protein, carbs, fat, and sodium for a specific day of the weekly meal plan")
     public NutritionInfo nutritionTotalsForDay(DayOfWeek day) {
-        var nutritionInfo = days.stream()
+        var nutritionInfo = new NutritionInfo(days.stream()
                 .filter(d -> d.day() == day)
-                .findFirst()
-                .map(d -> new NutritionInfo(
-                        Stream.of(d.breakfast(), d.lunch(), d.dinner())
-                                .filter(Objects::nonNull)
-                                .collect(Collectors.toList())
-                ))
-                .orElse(new NutritionInfo(List.of()));
+                .flatMap(WeeklyPlan::meals)
+                .toList());
         log.info("WeeklyPlan:nutritionTotalsForDay tool method finished with {} for {}", nutritionInfo, day);
         return nutritionInfo;
     }
 
     @Tool(description = "Returns the total number of meals across all days of the weekly meal plan")
     public long totalMealCount() {
-        var count = days.stream()
-                .flatMap(d -> Stream.of(d.breakfast(), d.lunch(), d.dinner()))
-                .filter(Objects::nonNull)
-                .count();
+        var count = days.stream().flatMap(WeeklyPlan::meals).count();
         log.info("WeeklyPlan:totalMealCount tool method finished with {}", count);
         return count;
+    }
+
+    private static Stream<Recipe> meals(DailyPlan dailyPlan) {
+        return Stream.of(dailyPlan.breakfast(), dailyPlan.lunch(), dailyPlan.dinner()).filter(Objects::nonNull);
     }
 
     public record DailyPlan(DayOfWeek day, @Nullable Recipe breakfast, @Nullable Recipe lunch, @Nullable Recipe dinner) {}

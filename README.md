@@ -2,7 +2,7 @@
 
 A sample project demonstrating how to build AI agents with Spring AI.
 
-**This is a copy of the Spring AI implementation from [SandraAhlgrimm/ai-nutrition-planner](https://github.com/SandraAhlgrimm/ai-nutrition-planner)**, a repository I created together with [Sandra Ahlgrimm](https://github.com/SandraAhlgrimm) for our talk comparing agentic Java frameworks. That repository implements the exact same nutrition planning use case three times — with Embabel, LangChain4j, and Spring AI — so the frameworks can be compared side by side. 
+**This is a copy of the Spring AI implementation from [SandraAhlgrimm/ai-nutrition-planner](https://github.com/SandraAhlgrimm/ai-nutrition-planner)**, a repository I created together with [Sandra Ahlgrimm](https://github.com/SandraAhlgrimm) for our talk comparing agentic Java frameworks. That repository implements the exact same nutrition planning use case three times — with Embabel, LangChain4j, and Spring AI — so the frameworks can be compared side by side.
 
 [Slides: Building AI Agents with Spring AI](slides.pdf)
 
@@ -70,7 +70,7 @@ A Grafana + OTLP stack (Loki, Tempo, Mimir) is included via Docker Compose.
 - **Grafana**: [http://localhost:3000](http://localhost:3000) (admin/admin)
 - **OTLP collector**: `localhost:4318` (HTTP) / `localhost:4317` (gRPC)
 
-To start the docker compose container via Spring Boot and enable tracing and metrics export from any module, activate the `observability` profile 
+To start the docker compose container via Spring Boot and enable tracing and metrics export from any module, activate the `observability` profile
 in addition to the profile for the LLM provider of choice:
 
 ```bash

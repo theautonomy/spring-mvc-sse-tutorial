@@ -157,7 +157,7 @@ classDiagram
 Notes:
 
 - **`WeeklyPlanRequest`** has a no-arg constructor that defaults to no meals, country `DE` and empty instructions. The form binds checkboxes named `meals[MONDAY]=BREAKFAST` straight into the map.
-- **`NutritionInfo`** has a second constructor that takes a `List<Recipe>` and sums each field. This is how daily totals are computed.
+- **`NutritionInfo`** has a second constructor that takes a `List<Recipe>` and sums each field, counting missing values as 0. This is how daily totals are computed.
 - **`NutritionAuditValidationResult`** implements `ValidationRetryAdvisor.ValidationResult`. Each violation has `dayOfWeek`, `recipeName`, `explanation` and `suggestedFix`. `feedback()` returns the whole record's `toString()`, so all violations go back to the curator.
 - **`SeasonalIngredients`** is just `List<String> ingredients`.
 
@@ -268,13 +268,51 @@ Details:
 
 ### The `@Tool` methods on `WeeklyPlan`
 
-| Tool | Returns |
-| --- | --- |
-| `dailyNutritionTotals()` | `Map<DayOfWeek, NutritionInfo>`: calories, protein, carbs, fat and sodium per day |
-| `nutritionTotalsForDay(DayOfWeek)` | `NutritionInfo` for one day (empty totals if that day isn't in the plan) |
-| `totalMealCount()` | Number of non-null meals. The agent also calls it in Java for a log line |
+`WeeklyPlan` has two jobs. It is the structured output type the Recipe Curator returns, and it is the tool object the Nutrition Guard calls. The tools matter only during validation. The curator doesn't get them, and its output schema comes only from the record's fields.
 
-Totals skip meals that are `null` and recipes with no `nutrition`.
+| Tool | Arguments | Returns |
+| --- | --- | --- |
+| `dailyNutritionTotals()` | none | `Map<DayOfWeek, NutritionInfo>` in weekday order: calories, protein, carbs, fat and sodium per day |
+| `nutritionTotalsForDay(DayOfWeek)` | `{"day": "MONDAY" … "SUNDAY"}` | `NutritionInfo` for one day (all zeros if that day isn't in the plan) |
+| `totalMealCount()` | none | Number of non-null meals |
+
+**How they're registered.** `validateWeeklyPlan` passes the plan itself: `.tools(weeklyPlan)`. Spring AI scans the object for `@Tool` methods and binds each one to **that instance**. The model never sends the plan as an argument, because the tool already has it through `this`. Each retry validates a new draft in a new `ChatClient` call, so the tools always compute from the current draft.
+
+**What happens during one validation call:**
+
+```mermaid
+sequenceDiagram
+    participant G as Nutrition Guard (model)
+    participant S as Spring AI tool-calling loop
+    participant P as WeeklyPlan instance
+    S->>G: prompt (plan + profile) + tool search tool
+    G->>S: search "calories per day"
+    S-->>G: matching tool definitions
+    G->>S: call dailyNutritionTotals()
+    S->>P: invoke by reflection
+    P-->>S: Map<DayOfWeek, NutritionInfo>
+    S-->>G: tool result as JSON
+    G-->>S: NutritionAuditValidationResult<br/>(e.g. MONDAY 1,950 kcal > 1,800 → CALORIE_OVERFLOW)
+```
+
+The model decides *what to check*, and Java does the *adding up*, because LLMs are bad at arithmetic. The log lines `WeeklyPlan:<tool> tool method finished with …` show which tools actually ran.
+
+**Direct Java calls, not tool calls:**
+
+- `createNutritionPlan` calls `totalMealCount()` for a log line.
+- `dailyNutritionTotals()` calls `nutritionTotalsForDay()` as a normal method, so the model sees one call, not seven.
+- `WeeklyPlanTests` calls the methods directly.
+
+**Robustness** (both cases have unit tests):
+
+- **Duplicate days.** If the model returns the same day more than once, the entries are merged: `dailyNutritionTotals()` returns one entry per distinct day, and `nutritionTotalsForDay()` sums every entry for that day. Before this fix, a duplicate day threw `IllegalStateException` from `Collectors.toMap`.
+- **Missing values.** Meals that are `null`, recipes with no `nutrition`, and `null` fields inside `NutritionInfo` (for example no `sodiumMg`) count as 0. Before this fix, a `null` field caused an NPE when unboxed.
+
+**Limits:**
+
+- **Tool use isn't enforced.** The prompt says "You have to use available tools", but the model can skip them.
+- **Exact sums of estimated numbers.** The totals add up the per-recipe values the curator *estimated*. If those are wrong, the totals are exactly right sums of wrong numbers. Missing values that count as 0 also make totals too low.
+- **Missing days look like zero.** A day that isn't in the plan returns all zeros, which the model could misread as "nothing eaten".
 
 ## Tools and tool search
 
@@ -414,7 +452,7 @@ The app sends OTLP metrics and traces. Spring AI adds its own spans for chat cli
 
 ## Tests
 
-`WeeklyPlanTests` has 3 plain unit tests for `WeeklyPlan.dailyNutritionTotals()`: summing three meals, skipping `null` meals, and one entry per day. They need no LLM or Spring context.
+`WeeklyPlanTests` has 5 plain unit tests for the `WeeklyPlan` tools: summing three meals, skipping `null` meals, one entry per day, merging duplicate days, and counting missing nutrition values as 0. They need no LLM or Spring context.
 
 There are no tests for the agent, the advisor or the controllers. `src/test/resources/application-test.yaml` looks stale: it configures `spring.ai.azure.openai.*` (no Azure starter is on the classpath) and `nutrition-planner.max-validation-iterations` (no code reads it).
 
@@ -426,6 +464,6 @@ There are no tests for the agent, the advisor or the controllers. `src/test/reso
 - **A failed plan can still be returned.** After 3 failed checks, the 4th draft is returned without being validated, and only a warning is logged. The UI doesn't show that the plan failed validation.
 - **Cost and time.** A run makes at least 3 LLM calls (ingredients, draft, validation) and up to 8 (1 + 4 drafts + 3 validations), plus tool-call round trips.
 - **Threads.** The agent runs on the common ForkJoinPool and can block there for up to 5 minutes while waiting for a human. That's fine for a demo but could starve the pool under load.
-- **Null-safety.** `NutritionInfo(List<Recipe>)` unboxes each field, so a recipe whose nutrition has a `null` field (for example no sodium) causes a `NullPointerException` during validation.
+- **Missing nutrition values count as 0.** This avoids crashes during validation, but totals can come out too low when the curator leaves a value out. See [The `@Tool` methods on `WeeklyPlan`](#the-tool-methods-on-weeklyplan).
 - **Some parts are experimental.** `SkillsTool`, `ShellTools` and `AskUserQuestionTool` come from `spring-ai-agent-utils` 0.11.0. Tool search and `@McpTool` are part of Spring AI 2.0.
 - **Profiles are config, not a database.** User profiles live in `application.yaml` under `nutrition-planner.user-profiles`. There's one demo user.
