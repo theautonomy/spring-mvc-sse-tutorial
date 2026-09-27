@@ -2,7 +2,9 @@
 
 A step-by-step tutorial for **Server-Sent Events with Spring MVC (`SseEmitter`), htmx and [jte](https://jte.gg) templates**. The `sse-tutorial` branch has the same tutorial with Thymeleaf.
 
-This branch takes the SSE part of the AI Nutrition Planner (on `main`) and teaches it on its own. All AI code and config is removed. What's left is a small Spring Boot app with one page per step, from hello world to a job that pauses to ask the user a question.
+The purpose of this repo is to demo SSE with Spring MVC. It is a small Spring Boot app with one page per step, from hello world to a job that pauses to ask the user a question.
+
+The browser side uses HTMX.
 
 ➡️ **Start with [TUTORIAL.md](TUTORIAL.md).**
 
