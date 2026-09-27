@@ -26,8 +26,6 @@
                 The POST handler completes that future, which wakes the job up.</li>
             <li>Try all three outcomes: approve, reject, and doing nothing for 60 s. After a timeout the question is
                 expired, so a late click gets "too late" instead of being silently ignored.</li>
-            <li>This is exactly how the nutrition planner asks its questions: <code>AskUserQuestionHandler</code> is the
-                future, <code>fragments/hitl</code> is the question, <code>provideAnswers</code> is the POST.</li>
         </ul>
     </section>
 

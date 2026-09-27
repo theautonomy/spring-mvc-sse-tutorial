@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Step 3: a long-running job that reports progress. A POST starts the job and returns HTML that opens an SSE
- * stream for that job. The nutrition planner's {@code POST /plan} works the same way.
+ * stream for that job.
  */
 @Controller
 class ProgressController {

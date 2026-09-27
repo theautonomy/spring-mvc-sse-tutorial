@@ -25,8 +25,7 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * Step 6: two-way interaction. A fake deployment runs a few steps, then pauses and asks for approval over SSE.
- * The answer comes back as a normal POST, and the job continues. This is the nutrition planner's
- * human-in-the-loop flow without the AI.
+ * The answer comes back as a normal POST, and the job continues: a human-in-the-loop flow.
  */
 @Controller
 class ApprovalController {
