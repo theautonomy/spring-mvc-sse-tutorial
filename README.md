@@ -1,10 +1,21 @@
-# SSE Tutorial (branch `sse-tutorial-vanilla`)
+# SSE Tutorial (branch `sse-tutorial-vanilla-security`)
 
 A step-by-step tutorial for **Server-Sent Events with Spring MVC (`SseEmitter`) and plain JavaScript (`EventSource`, `fetch`)**.
 
-This branch takes the SSE part of the AI Nutrition Planner (on `main`) and teaches it on its own. All AI code and config is removed. What's left is a small Spring Boot app with one page per step, from hello world to a job that pauses to ask the user a question.
+The purpose of this repo is to demo SSE with Spring MVC. It is a small Spring Boot app with one page per step, from hello world to a job that pauses to ask the user a question.
 
-The browser side uses no framework. The `sse-tutorial` branch teaches the same steps with htmx and its SSE extension.
+The browser side uses no framework.
+
+## Branches
+
+Each branch is a complete, runnable version of the tutorial. They build on each other:
+
+| Branch | Purpose |
+| --- | --- |
+| `sse-tutorial` | The browser side uses htmx and its SSE extension; templates are Thymeleaf. |
+| `sse-tutorial-jte` | Same as `sse-tutorial`, with [jte](https://jte.gg) templates instead of Thymeleaf. |
+| `sse-tutorial-vanilla` | Steps 1–6 without htmx: plain `EventSource` and `fetch`, so every line that talks to the server is visible. |
+| `sse-tutorial-vanilla-security` (this branch) | `sse-tutorial-vanilla` plus Spring Security (login, USER and ADMIN roles, CSRF, a 403 page) and steps 7–8 (database pipelines with H2). |
 
 ➡️ **Start with [TUTORIAL.md](TUTORIAL.md).**
 
