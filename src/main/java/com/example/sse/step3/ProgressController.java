@@ -82,8 +82,8 @@ class ProgressController {
                 emitter.send(SseEmitter.event().name("progress").data(fragments.render("fragments/step3", "progress",
                         Map.of("percent", step * 100 / STEPS, "message", "Step %d of %d".formatted(step, STEPS)))));
             }
-            // Every way the job can end sends a "done" event. The page has sse-close="done", so htmx closes the
-            // EventSource instead of letting the browser reconnect to a job that no longer exists.
+            // Every way the job can end sends a "done" event. The page calls es.close() when it arrives, instead of
+            // letting the browser reconnect to a job that no longer exists.
             emitter.send(SseEmitter.event().name("done").data(fragments.render("fragments/step3", "result",
                     Map.of("task", task, "finishedAt", LocalTime.now().truncatedTo(ChronoUnit.SECONDS)))));
         } catch (IOException | IllegalStateException e) {

@@ -2,17 +2,17 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
 <body>
 
-<!-- Returned by POST /step3/jobs. Inserting it opens the job's stream. -->
+<!-- Returned by POST /step3/jobs. The page reads data-events and opens that stream. -->
 <div th:fragment="job" class="border border-gray-200 rounded p-4 space-y-3"
-     hx-ext="sse" th:attr="sse-connect=|/step3/jobs/${jobId}/events|" sse-close="done">
+     th:attr="data-events=|/step3/jobs/${jobId}/events|">
     <p class="text-sm text-gray-700">
         <span class="font-semibold" th:text="${task}">Task</span>
         <span class="text-xs text-gray-400" th:text="|job ${jobId}|">job id</span>
     </p>
-    <div sse-swap="progress">
+    <div data-progress>
         <p class="text-sm text-gray-500">Waiting for the first event…</p>
     </div>
-    <div sse-swap="done"></div>
+    <div data-done></div>
 </div>
 
 <!-- Sent as the data of each "progress" event -->

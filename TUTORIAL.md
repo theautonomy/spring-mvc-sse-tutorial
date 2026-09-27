@@ -1,12 +1,14 @@
-# Server-Sent Events with Spring MVC and htmx
+# Server-Sent Events with Spring MVC and plain JavaScript
 
 A hands-on tutorial in six steps. Each step is a page in this app with a working example, and each one adds one idea to the one before it. By the end you'll have built every SSE pattern the nutrition planner (on `main`) uses: streaming progress, HTML fragments as events, and pausing a job to ask the user a question.
+
+The browser side uses no framework, only `EventSource` and `fetch`. Every line that talks to the server is on the page, so you can see exactly what a library like htmx would otherwise do for you. (The `sse-tutorial` branch has the same steps written with htmx.)
 
 | Step | Page | You learn |
 | --- | --- | --- |
 | 1 | [/step1](http://localhost:8080/step1) | The wire format, `SseEmitter`, plain `EventSource`, why the browser reconnects |
-| 2 | [/step2](http://localhost:8080/step2) | htmx `sse-connect` / `sse-swap`, long-lived streams, timeouts, cleanup |
-| 3 | [/step3](http://localhost:8080/step3) | Start a job with POST and stream its progress, HTML fragments as events, `sse-close`, errors |
+| 2 | [/step2](http://localhost:8080/step2) | Named events and `addEventListener`, long-lived streams, timeouts, cleanup |
+| 3 | [/step3](http://localhost:8080/step3) | Start a job with POST and stream its progress, HTML fragments as events, closing on `done`, errors |
 | 4 | [/step4](http://localhost:8080/step4) | One stream, many named events, many targets |
 | 5 | [/step5](http://localhost:8080/step5) | Broadcast to many tabs, dead-client cleanup, heartbeats, event ids, catch-up after reconnect |
 | 6 | [/step6](http://localhost:8080/step6) | Two-way: pause a job, ask over SSE, continue on POST |
@@ -19,7 +21,7 @@ A hands-on tutorial in six steps. Each step is a page in this app with a working
 ./mvnw test
 ```
 
-The app needs only `spring-boot-starter-webmvc` and `spring-boot-starter-thymeleaf`. htmx 2.0.3 and its SSE extension 2.2.2 load from a CDN in `templates/layout.html`.
+The app needs only `spring-boot-starter-webmvc` and `spring-boot-starter-thymeleaf`. The only thing loaded from a CDN is Tailwind, for styling (`templates/layout.html`). Each page's JavaScript is a small inline `<script>`.
 
 ## SSE in one minute
 
@@ -43,7 +45,7 @@ The browser reads it with `EventSource`, which also **reconnects automatically**
 | Reconnect | Built into the browser | You write it | n/a |
 | Fits | Progress, feeds, notifications, dashboards | Chat-heavy, games, collaborative editing | Rare updates |
 
-For browser → server, SSE apps just use ordinary requests (forms, `hx-post`). Step 6 shows that this is enough even for a back-and-forth conversation.
+For browser → server, SSE apps just use ordinary requests (forms, `fetch`). Step 6 shows that this is enough even for a back-and-forth conversation.
 
 In Spring MVC, a controller method returns an `SseEmitter`. Spring keeps the response open, and any thread can call `emitter.send(...)` until someone calls `emitter.complete()`.
 
@@ -87,25 +89,27 @@ data:bye
 
 ```
 
-**The gotcha:** click "Connect (naive)". The number keeps going up, because **SSE has no end-of-stream signal**. When the server completes the response, `EventSource` treats it as a dropped connection and reconnects after about 3 s, forever. The fix is a convention between client and server: the server sends a final event (here `close`), and the client calls `es.close()`. Steps 3 and 6 do this with htmx's `sse-close`.
+**The gotcha:** click "Connect (naive)". The number keeps going up, because **SSE has no end-of-stream signal**. When the server completes the response, `EventSource` treats it as a dropped connection and reconnects after about 3 s, forever. The fix is a convention between client and server: the server sends a final event (here `close`), and the client calls `es.close()`. Steps 3 and 6 do the same with a `done` event.
 
 ---
 
-## Step 2: A ticking clock with htmx
+## Step 2: A ticking clock
 
 **Goal:** a stream that stays open, and the cleanup it needs.
 
-**Client** ([step2.html](src/main/resources/templates/step2.html)): no JavaScript.
+**Client** ([step2.html](src/main/resources/templates/step2.html)):
 
 ```html
-<div hx-ext="sse" sse-connect="/step2/stream">
-    <p sse-swap="time">--:--:--</p>
-</div>
+<p id="clock">--:--:--</p>
+<script>
+    const es = new EventSource('/step2/stream');
+    es.addEventListener('time', e => document.getElementById('clock').textContent = e.data);
+</script>
 ```
 
-- `hx-ext="sse"` turns on the extension for this element and its children.
-- `sse-connect` opens one `EventSource` for the element.
-- `sse-swap="time"` swaps the data of each `time` event into the element (default swap: `innerHTML`).
+- The server names every event `time`. Named events go only to listeners for that name, never to `onmessage`.
+- `textContent` because the data is plain text. Step 3 switches to `innerHTML` when the data is HTML.
+- Nothing else is needed. When the stream ends (the 60 s timeout below), `EventSource` reconnects on its own and the clock keeps going.
 
 **Server** ([ClockController.java](src/main/java/com/example/sse/step2/ClockController.java)):
 
@@ -144,19 +148,19 @@ return emitter;
 
 ```mermaid
 sequenceDiagram
-    participant B as Browser (htmx)
+    participant B as Browser
     participant C as ProgressController
     participant J as Job thread
     B->>C: POST /step3/jobs (task=...)
     C->>C: new SseEmitter, store under jobId
     C->>J: start job
-    C-->>B: HTML fragment with sse-connect=/step3/jobs/{jobId}/events
+    C-->>B: HTML fragment with data-events=/step3/jobs/{jobId}/events
     J->>C: send "progress" (buffered, nobody connected yet)
     B->>C: GET /step3/jobs/{jobId}/events
     C-->>B: the stored emitter (buffered events flush)
     J-->>B: progress, progress, …
     J-->>B: done (result or error)
-    Note over B: sse-close="done" → EventSource closed
+    Note over B: on "done": es.close()
     J->>C: complete() → onCompletion removes the emitter
 ```
 
@@ -182,16 +186,37 @@ SseEmitter events(@PathVariable String jobId) {
 }
 ```
 
-**The returned fragment** ([fragments/step3.html](src/main/resources/templates/fragments/step3.html)):
+**The returned fragment** ([fragments/step3.html](src/main/resources/templates/fragments/step3.html)) says where its stream is:
 
 ```html
-<div th:fragment="job" hx-ext="sse" th:attr="sse-connect=|/step3/jobs/${jobId}/events|" sse-close="done">
-    <div sse-swap="progress">Waiting for the first event…</div>
-    <div sse-swap="done"></div>
+<div th:fragment="job" th:attr="data-events=|/step3/jobs/${jobId}/events|">
+    <div data-progress>Waiting for the first event…</div>
+    <div data-done></div>
 </div>
 ```
 
-**HTML fragments as event data.** The server renders Thymeleaf fragments to strings with [`FragmentRenderer`](src/main/java/com/example/sse/FragmentRenderer.java), and htmx swaps them in. This is hypermedia over SSE: the server decides what the page looks like, and the client stays declarative.
+**The page** ([step3.html](src/main/resources/templates/step3.html)) posts the form, inserts the fragment, and opens the stream:
+
+```js
+form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const response = await fetch('/step3/jobs', {method: 'POST', body: new URLSearchParams(new FormData(form))});
+    container.innerHTML = await response.text();
+    const job = container.firstElementChild;
+
+    if (es) es.close();                                   // a previous job's stream
+    const stream = es = new EventSource(job.dataset.events);
+    stream.addEventListener('progress', e => job.querySelector('[data-progress]').innerHTML = e.data);
+    stream.addEventListener('done', e => {
+        job.querySelector('[data-done]').innerHTML = e.data;
+        stream.close();                                   // don't reconnect to a finished job
+    });
+});
+```
+
+`URLSearchParams` sends the form as `application/x-www-form-urlencoded`, which `@RequestParam` reads like a normal form post.
+
+**HTML fragments as event data.** The server renders Thymeleaf fragments to strings with [`FragmentRenderer`](src/main/java/com/example/sse/FragmentRenderer.java), and the page puts them in with `innerHTML`. The server decides what the page looks like, and the client code stays the same whatever the fragments contain. Setting `innerHTML` is safe here only because the fragments escape every value with `th:text`. The alternative is sending JSON and building the DOM in JavaScript, which moves the templates to the browser.
 
 ```java
 public String render(String template, String fragment, Map<String, Object> variables) {
@@ -207,9 +232,9 @@ In the SSE format a line break ends a `data:` line, so the renderer puts the HTM
 **Lessons:**
 
 - **Early events aren't lost.** The job starts before the browser connects. `SseEmitter` buffers sends until the GET handler returns it. Try it: `curl -d task=x …/step3/jobs`, wait 2 s, then `curl -N` the events URL. You still get step 1.
-- **Every ending sends the closing event.** Success sends `done` with the result, and failure sends `done` with an error fragment. With `sse-close="done"` htmx closes the `EventSource`. Without it you'd hit step 1's reconnect loop, and the reconnect would get a 404, because `onCompletion` already removed the job.
+- **Every ending sends the closing event.** Success sends `done` with the result, and failure sends `done` with an error fragment. On `done` the page calls `stream.close()`. Without it you'd hit step 1's reconnect loop, and the reconnect would get a 404, because `onCompletion` already removed the job.
 - **Errors are content.** A failed job doesn't break the stream. It sends a friendly error fragment, like the planner's `failInteraction`.
-- **Replacing the fragment closes the stream.** Start a second job: htmx notices that the old `sse-connect` element left the page and closes its `EventSource`.
+- **Removing HTML does not close a stream.** An `EventSource` lives until you call `close()` (or the page unloads), even if the elements it updates are gone. That's why the page closes the previous job's stream before it opens the next one. Start a second job while one runs and watch the Network tab: the old request ends.
 - **Leaks.** If nobody ever connects, the emitter sits in the map until its 5-minute timeout. Always give job emitters a timeout.
 
 ---
@@ -218,13 +243,12 @@ In the SSE format a line break ends a `data:` line, so the renderer puts the HTM
 
 **Goal:** one connection, many named events, many targets.
 
-```html
-<section hx-ext="sse" sse-connect="/step4/stream">
-    <div sse-swap="cpu">…</div>
-    <div sse-swap="memory">…</div>
-    <p sse-swap="orders">0</p>
-    <ul sse-swap="log" hx-swap="afterbegin"></ul>
-</section>
+```js
+const es = new EventSource('/step4/stream');
+es.addEventListener('cpu', e => document.getElementById('cpu').innerHTML = e.data);
+es.addEventListener('memory', e => document.getElementById('memory').innerHTML = e.data);
+es.addEventListener('orders', e => document.getElementById('orders').textContent = e.data);
+es.addEventListener('log', e => document.getElementById('activity').insertAdjacentHTML('afterbegin', e.data));
 ```
 
 ```java
@@ -237,8 +261,7 @@ emitter.send(SseEmitter.event().name("log").data(logLine("Order #1001 received")
 **Lessons:**
 
 - **One stream, not four.** Over HTTP/1.1 a browser allows only about 6 connections per host, and every open `EventSource` uses one. One stream with named events avoids that limit. (HTTP/2 multiplexes, so the limit is much higher.)
-- **`sse-swap` picks the event; `hx-swap` picks how.** Gauges replace their content (the default `innerHTML`). The activity list uses `afterbegin` to prepend, and `beforeend` would append.
-- An element can listen to several names: `sse-swap="cpu,memory"`.
+- **The event name picks the listener; the listener picks how.** Gauges replace their content with `innerHTML`. The activity list prepends with `insertAdjacentHTML('afterbegin', …)`, and `'beforeend'` would append. The plain-text `orders` count uses `textContent`.
 
 ---
 
@@ -279,8 +302,9 @@ private void send(SseEmitter emitter, Supplier<SseEventBuilder> event) {
 - **Build one event per emitter.** `broadcast` takes a `Supplier<SseEventBuilder>`, because a builder is consumed when it's sent. Don't share one builder instance across emitters.
 - **Heartbeats.** A tab that disappears is only noticed at the next `send`. Every 15 s, `@Scheduled heartbeat()` sends a comment (`: ping`). The browser ignores it, but the write finds dead tabs, and proxies don't close a connection that looks idle.
 - **No timeout, on purpose.** Chat streams use `new SseEmitter(0L)` (no timeout), because the heartbeat handles cleanup.
-- **Catching up after a reconnect.** Every message event has an `id`. When the connection drops, the browser reconnects to the same URL and sends a `Last-Event-ID` header with the last id it saw. The controller reads it with `@RequestHeader(name = "Last-Event-ID", required = false) Long lastEventId`, and `join` replays only the newer messages from a 50-message history. The server sends `retry:5000` first, so the browser waits 5 s. Press "Simulate a dropped connection", post from another tab within 5 s, and watch the missed message arrive.
-- **Escape user input.** Anything a user types is sent to every tab. Messages are rendered with `th:text`, which escapes HTML. `th:utext` here would be a stored XSS bug for everyone in the room.
+- **Client side.** One `EventSource` with listeners for `presence` and `message`. Sending is `fetch('/step5/messages', {method: 'POST', …})`, and the page doesn't add the message itself: it comes back over the stream like it does for every other tab. The server names chat events `message`, the default name, so `onmessage` would receive them too.
+- **Catching up after a reconnect.** Every message event has an `id`. When the connection drops, the browser reconnects to the same URL and sends a `Last-Event-ID` header with the last id it saw. The controller reads it with `@RequestHeader(name = "Last-Event-ID", required = false) Long lastEventId`, and `join` replays only the newer messages from a 50-message history. The server sends `retry:5000` first, so the browser waits 5 s. Press "Simulate a dropped connection", post from another tab within 5 s, and watch the missed message arrive. The page contains no reconnect code: `EventSource` keeps the last id and sends the header itself.
+- **Escape user input.** Anything a user types is sent to every tab. Messages are rendered with `th:text`, which escapes HTML, and the page inserts the result with `insertAdjacentHTML`. `th:utext` here would be a stored XSS bug for everyone in the room.
 - **One server only.** The registry lives in memory. With several app instances, each has its own list, so a message posted to instance A never reaches tabs on instance B. Real deployments add a pub/sub layer (Redis, a message broker, Postgres `LISTEN/NOTIFY`) that feeds each instance's local emitters.
 
 ---
@@ -324,10 +348,24 @@ boolean answer(T value) {
 }
 ```
 
-The question is just another HTML fragment. Its buttons post the answer with htmx:
+The question is just another HTML fragment. Its buttons carry where to post and what to send:
 
 ```html
-<button th:attr="hx-post=|/step6/jobs/${jobId}/answer|" hx-vals='{"approved": true}' hx-target="#question">Approve</button>
+<button th:attr="data-answer=|/step6/jobs/${jobId}/answer|" data-approved="true">Approve</button>
+```
+
+The page has one click listener on the job container. Questions arrive later, over the stream, so the listener can't be attached to their buttons in advance:
+
+```js
+document.getElementById('job').addEventListener('click', async event => {
+    const button = event.target.closest('[data-answer]');
+    if (!button) return;
+    const response = await fetch(button.dataset.answer, {
+        method: 'POST',
+        body: new URLSearchParams({approved: button.dataset.approved})
+    });
+    button.closest('[data-question]').innerHTML = await response.text();   // "You approved. Continuing…"
+});
 ```
 
 **Lessons:**
@@ -362,16 +400,24 @@ The question is just another HTML fragment. Its buttons post the answer with htm
 | `completeWithError(e)` | Ends with an error dispatch |
 | `onTimeout` / `onError` / `onCompletion` | Lifecycle callbacks. `onCompletion` runs last in every case, so clean up there |
 
-### htmx SSE extension
+### `EventSource`
 
-| Attribute | Meaning |
+| API | Meaning |
 | --- | --- |
-| `hx-ext="sse"` | Turn the extension on for this element and its children |
-| `sse-connect="/url"` | Open an `EventSource`. Closed when the element leaves the page |
-| `sse-swap="name[,name]"` | Swap the data of these events into this element |
-| `hx-swap="beforeend"` | How to swap (`innerHTML` by default) |
-| `sse-close="name"` | Close the `EventSource` when this event arrives |
-| `htmx:sseOpen`, `htmx:sseError`, `htmx:sseClose`, `htmx:sseMessage` | DOM events for logging and UI state |
+| `new EventSource('/url')` | Open the stream (GET, cookies included). Reconnects by itself when it drops |
+| `es.onmessage = e => …` | Unnamed events (and events named `message`) |
+| `es.addEventListener('name', e => …)` | Named events. `e.data` is the payload, `e.lastEventId` the id |
+| `es.onopen` | Connected, including after each reconnect |
+| `es.onerror` | The connection failed or ended. `readyState` 0 = reconnecting, 2 = gave up |
+| `es.close()` | Stop for good. The only way to stop reconnecting. Removing HTML doesn't do it |
+
+### Putting event data into the page
+
+| Call | Use for |
+| --- | --- |
+| `el.textContent = e.data` | Plain text. Never interprets markup |
+| `el.innerHTML = e.data` | Replace with a server-rendered fragment |
+| `el.insertAdjacentHTML('beforeend', e.data)` | Append (`'afterbegin'` to prepend) |
 
 ### Production notes
 
@@ -384,16 +430,16 @@ The question is just another HTML fragment. Its buttons post the answer with htm
 
 ## Map to the nutrition planner
 
-The `main` branch uses steps 3 and 6 together:
+The `main` branch uses steps 3 and 6 together. It uses htmx for the browser side, so its attributes replace the JavaScript you wrote here:
 
 | Tutorial | Nutrition planner on `main` |
 | --- | --- |
-| `ProgressController.start` returns a fragment with `sse-connect` | `NutritionPlannerUiController.createPlan` → `SseInteractionController.eventStream` → `fragments/events` |
+| `ProgressController.start` returns a fragment with `data-events` | `NutritionPlannerUiController.createPlan` → `SseInteractionController.eventStream` → `fragments/events` |
 | `emitters` map + `GET …/{id}/events` | `SseInteractionController.emitters` + `GET /interactions/{id}/events` |
 | `FragmentRenderer.render` | `SseInteractionController.sendEvent` (`TemplateEngine.process`) |
 | Error fragment as the last event | `failInteraction` → `fragments/error` |
 | `PendingQuestion` | `AskUserQuestionHandler` (5-minute `CompletableFuture`) |
-| Question fragment with `hx-post` answers | `fragments/hitl` → `POST /interaction/{id}/answers` → `provideAnswers` |
-| `sse-close="done"` | Not used there: the planner calls `emitter.complete()`, and `index.html` re-enables the button on `htmx:sseClose` / `htmx:sseError` |
+| Question fragment, answers posted with `fetch` | `fragments/hitl` → `POST /interaction/{id}/answers` → `provideAnswers` |
+| `stream.close()` on `done` | Not used there: the planner calls `emitter.complete()`, and `index.html` re-enables the button on `htmx:sseClose` / `htmx:sseError` |
 
 The last row is worth a look after step 1: without a closing event the browser tries to reconnect to a finished interaction. The planner's emitter is gone by then, so the reconnect fails, and the page reacts to the resulting `htmx:sseError`.

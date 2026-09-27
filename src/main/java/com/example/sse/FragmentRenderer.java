@@ -9,7 +9,7 @@ import java.util.Set;
 
 /**
  * Renders one {@code th:fragment} of a Thymeleaf template to an HTML string, so it can be sent as the data of an
- * SSE event. htmx then swaps that HTML into the page. Introduced in step 3.
+ * SSE event. The page then puts that HTML into the right element. Introduced in step 3.
  */
 @Component
 public class FragmentRenderer {

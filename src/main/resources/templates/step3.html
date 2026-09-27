@@ -8,12 +8,12 @@
     <h1 class="text-2xl font-bold text-gray-900">Step 3: Progress of a long task</h1>
     <p class="text-gray-700">
         The form POSTs to <code>/step3/jobs</code>. The server starts the job in the background and answers right away
-        with an HTML fragment. That fragment contains <code>sse-connect</code>, so as soon as htmx inserts it, the browser
-        opens the job's stream and receives <code>progress</code> events until a final <code>done</code> event.
+        with an HTML fragment. The page inserts it, reads the stream URL from its <code>data-events</code> attribute,
+        and opens an <code>EventSource</code> that receives <code>progress</code> events until a final <code>done</code> event.
     </p>
 
     <section class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-        <form hx-post="/step3/jobs" hx-target="#job" hx-swap="innerHTML" class="flex flex-wrap items-end gap-3">
+        <form id="start" class="flex flex-wrap items-end gap-3">
             <div class="flex-1 min-w-48">
                 <label class="block text-xs font-medium text-gray-600 mb-1" for="task">Task name</label>
                 <input id="task" name="task" type="text" value="Import customers" required
@@ -30,19 +30,20 @@
         <ul class="list-disc pl-5 space-y-1">
             <li>Two requests: <code>POST /step3/jobs</code> (starts the job, returns HTML) and
                 <code>GET /step3/jobs/{id}/events</code> (the stream). Look at the browser's Network tab.</li>
-            <li>Event data is HTML rendered on the server from Thymeleaf fragments. htmx just swaps it in.</li>
+            <li>Event data is HTML rendered on the server from Thymeleaf fragments. The page just sets
+                <code>innerHTML</code>. That is safe here because the server escapes everything with <code>th:text</code>.</li>
             <li>The job starts before the browser connects. Early events are not lost: the emitter buffers them
                 until the GET returns it.</li>
-            <li>Success and failure both end with a <code>done</code> event, and the stream has
-                <code>sse-close="done"</code>. Remember step 1: without it the browser would reconnect to a finished job.</li>
-            <li>Start a second job while one is running: the old fragment is replaced, htmx closes its stream, and the
-                server notices at the next <code>send</code>.</li>
+            <li>Success and failure both end with a <code>done</code> event, and the page calls <code>es.close()</code>
+                when it arrives. Remember step 1: without it the browser would reconnect to a finished job.</li>
+            <li>Start a second job while one is running: the page closes the old stream itself (removing its HTML does
+                not), and the server notices at the next <code>send</code>.</li>
         </ul>
     </section>
 
     <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
         <h2 class="font-semibold">Try it with curl</h2>
-        <pre class="bg-gray-100 p-3 rounded text-xs">curl -s -d task=demo http://localhost:8080/step3/jobs   # copy the job id from sse-connect
+        <pre class="bg-gray-100 p-3 rounded text-xs">curl -s -d task=demo http://localhost:8080/step3/jobs   # copy the job id from data-events
 curl -N http://localhost:8080/step3/jobs/&lt;job id&gt;/events</pre>
     </section>
 
@@ -51,5 +52,27 @@ curl -N http://localhost:8080/step3/jobs/&lt;job id&gt;/events</pre>
         <a href="/step4" class="text-blue-700 hover:underline">Next: Step 4 →</a>
     </p>
 </main>
+
+<script>
+    let es; // the stream of the job on screen
+
+    document.getElementById('start').addEventListener('submit', async event => {
+        event.preventDefault();
+        // Start the job. The response is the "job" fragment, which says where its stream is.
+        const response = await fetch('/step3/jobs', {method: 'POST', body: new URLSearchParams(new FormData(event.target))});
+        const container = document.getElementById('job');
+        container.innerHTML = await response.text();
+        const job = container.firstElementChild;
+
+        // Nothing closes an EventSource when its HTML leaves the page, so close the previous job's stream here
+        if (es) es.close();
+        const stream = es = new EventSource(job.dataset.events);
+        stream.addEventListener('progress', e => job.querySelector('[data-progress]').innerHTML = e.data);
+        stream.addEventListener('done', e => {
+            job.querySelector('[data-done]').innerHTML = e.data;
+            stream.close(); // the job is over: don't let the browser reconnect
+        });
+    });
+</script>
 </body>
 </html>

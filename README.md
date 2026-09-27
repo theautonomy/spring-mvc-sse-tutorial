@@ -1,15 +1,17 @@
-# SSE Tutorial (branch `sse-tutorial`)
+# SSE Tutorial (branch `sse-tutorial-vanilla`)
 
-A step-by-step tutorial for **Server-Sent Events with Spring MVC (`SseEmitter`) and htmx**.
+A step-by-step tutorial for **Server-Sent Events with Spring MVC (`SseEmitter`) and plain JavaScript (`EventSource`, `fetch`)**.
 
 This branch takes the SSE part of the AI Nutrition Planner (on `main`) and teaches it on its own. All AI code and config is removed. What's left is a small Spring Boot app with one page per step, from hello world to a job that pauses to ask the user a question.
+
+The browser side uses no framework. The `sse-tutorial` branch teaches the same steps with htmx and its SSE extension.
 
 ➡️ **Start with [TUTORIAL.md](TUTORIAL.md).**
 
 | Step | Page | Topic |
 | --- | --- | --- |
 | 1 | `/step1` | Hello world: wire format, `EventSource`, the reconnect gotcha |
-| 2 | `/step2` | A ticking clock with htmx: long-lived streams, timeouts, cleanup |
+| 2 | `/step2` | A ticking clock: long-lived streams, named events, timeouts, cleanup |
 | 3 | `/step3` | Progress of a long task: POST starts a job, HTML fragments as events |
 | 4 | `/step4` | A live dashboard: one stream, many named events |
 | 5 | `/step5` | A chat room: broadcast, heartbeats, `Last-Event-ID` catch-up |

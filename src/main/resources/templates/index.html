@@ -5,10 +5,11 @@
 <nav th:replace="~{layout :: nav(0)}"></nav>
 
 <main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
-    <h1 class="text-2xl font-bold text-gray-900">Server-Sent Events with Spring MVC and htmx</h1>
+    <h1 class="text-2xl font-bold text-gray-900">Server-Sent Events with Spring MVC and plain JavaScript</h1>
     <p class="text-gray-700">
         Server-Sent Events (SSE) let the server push data to the browser over one long HTTP response.
-        Each step below is a small working example that builds on the one before it.
+        Each step below is a small working example that builds on the one before it. The browser side uses only
+        <code>EventSource</code> and <code>fetch</code>: no framework.
         <code>TUTORIAL.md</code> in the repo explains every step in detail.
     </p>
 
@@ -18,12 +19,12 @@
             <p class="text-sm text-gray-600">The SSE wire format, <code>SseEmitter</code>, plain <code>EventSource</code>, and why the browser keeps reconnecting.</p>
         </li>
         <li class="bg-white rounded-lg border border-gray-200 p-4">
-            <a href="/step2" class="font-semibold text-blue-700 hover:underline">Step 2: A ticking clock with htmx</a>
-            <p class="text-sm text-gray-600">A long-lived stream, <code>sse-connect</code> and <code>sse-swap</code>, emitter timeouts and cleanup.</p>
+            <a href="/step2" class="font-semibold text-blue-700 hover:underline">Step 2: A ticking clock</a>
+            <p class="text-sm text-gray-600">A long-lived stream, named events and <code>addEventListener</code>, emitter timeouts and cleanup.</p>
         </li>
         <li class="bg-white rounded-lg border border-gray-200 p-4">
             <a href="/step3" class="font-semibold text-blue-700 hover:underline">Step 3: Progress of a long task</a>
-            <p class="text-sm text-gray-600">POST starts a job, the response opens its stream, HTML fragments as events, <code>sse-close</code>, errors.</p>
+            <p class="text-sm text-gray-600">POST starts a job, the response opens its stream, HTML fragments as events, closing the stream on <code>done</code>, errors.</p>
         </li>
         <li class="bg-white rounded-lg border border-gray-200 p-4">
             <a href="/step4" class="font-semibold text-blue-700 hover:underline">Step 4: A live dashboard</a>

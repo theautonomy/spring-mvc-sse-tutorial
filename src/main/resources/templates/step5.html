@@ -11,18 +11,16 @@
         broadcasts every message to each one. Sending a message is a normal POST.
     </p>
 
-    <section class="bg-white rounded-lg border border-gray-200 p-6 space-y-4"
-             hx-ext="sse" th:attr="sse-connect=|/step5/stream?tab=${tab}|">
+    <section class="bg-white rounded-lg border border-gray-200 p-6 space-y-4" id="chat"
+             th:attr="data-stream=|/step5/stream?tab=${tab}|,data-drop=|/step5/tabs/${tab}/drop|">
         <div class="flex items-center justify-between">
             <p class="text-sm text-gray-600">You are <b th:text="${user}">guest</b></p>
-            <p class="text-xs bg-slate-700 text-white px-2 py-0.5 rounded" sse-swap="presence">connecting…</p>
+            <p class="text-xs bg-slate-700 text-white px-2 py-0.5 rounded" id="presence">connecting…</p>
         </div>
 
-        <ul class="h-64 overflow-auto border border-gray-100 rounded p-3 space-y-1 text-sm" id="messages"
-            sse-swap="message" hx-swap="beforeend"></ul>
+        <ul class="h-64 overflow-auto border border-gray-100 rounded p-3 space-y-1 text-sm" id="messages"></ul>
 
-        <form hx-post="/step5/messages" hx-swap="none" class="flex gap-2"
-              hx-on::after-request="if (event.detail.successful) this.querySelector('[name=text]').value = ''">
+        <form id="send" class="flex gap-2">
             <input type="hidden" name="user" th:value="${user}"/>
             <input name="text" type="text" placeholder="Say something" autocomplete="off" required
                    class="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm"/>
@@ -30,8 +28,7 @@
         </form>
 
         <div class="flex items-center gap-3">
-            <button class="border border-gray-400 bg-white hover:bg-gray-50 px-3 py-1 rounded text-xs"
-                    th:attr="hx-post=|/step5/tabs/${tab}/drop|" hx-swap="none">
+            <button id="drop" class="border border-gray-400 bg-white hover:bg-gray-50 px-3 py-1 rounded text-xs">
                 Simulate a dropped connection
             </button>
             <span class="text-xs text-gray-500">then send a message from another tab within 5 seconds</span>
@@ -48,9 +45,11 @@
                 tells the server whether the tab is still there.</li>
             <li>Every message event has an <code>id</code>. Press "Simulate a dropped connection", post from another tab,
                 and watch this tab reconnect after 5 s (the <code>retry</code> the server sent) and receive only the
-                missed messages. The browser sends the last id in the <code>Last-Event-ID</code> header.</li>
-            <li>Messages are rendered with <code>th:text</code>, so HTML typed into the chat is escaped. Broadcasting
-                unescaped user input would be an XSS hole for every connected tab.</li>
+                missed messages. The browser sends the last id in the <code>Last-Event-ID</code> header. The page has no
+                reconnect code at all: <code>EventSource</code> does it.</li>
+            <li>Messages are rendered with <code>th:text</code>, so HTML typed into the chat is escaped before the page
+                inserts it with <code>insertAdjacentHTML</code>. Broadcasting unescaped user input would be an XSS hole
+                for every connected tab.</li>
         </ul>
     </section>
 
@@ -73,15 +72,29 @@ curl -d user=curl -d text=hello http://localhost:8080/step5/messages</pre>
         el.textContent += new Date().toLocaleTimeString() + '  ' + text + '\n';
         el.scrollTop = el.scrollHeight;
     }
-    document.body.addEventListener('htmx:sseOpen', () => log('stream connected'));
-    document.body.addEventListener('htmx:sseError', () => log('stream dropped, the browser reconnects with Last-Event-ID'));
-    // Keep the newest message in view
-    document.body.addEventListener('htmx:sseMessage', e => {
-        if (e.detail.type === 'message') {
-            const list = document.getElementById('messages');
-            list.scrollTop = list.scrollHeight;
-        }
+
+    const chat = document.getElementById('chat');
+    const messages = document.getElementById('messages');
+
+    const es = new EventSource(chat.dataset.stream);
+    es.onopen = () => log('stream connected');
+    es.onerror = () => log('stream dropped, the browser reconnects with Last-Event-ID');
+    es.addEventListener('presence', e => document.getElementById('presence').textContent = e.data);
+    // The server names these events "message", the default name, so es.onmessage would work too
+    es.addEventListener('message', e => {
+        messages.insertAdjacentHTML('beforeend', e.data);
+        messages.scrollTop = messages.scrollHeight; // keep the newest message in view
     });
+
+    // Sending is an ordinary POST. The message comes back to this tab over the stream, like to every other tab.
+    document.getElementById('send').addEventListener('submit', async event => {
+        event.preventDefault();
+        const form = event.target;
+        const response = await fetch('/step5/messages', {method: 'POST', body: new URLSearchParams(new FormData(form))});
+        if (response.ok) form.elements.text.value = '';
+    });
+
+    document.getElementById('drop').addEventListener('click', () => fetch(chat.dataset.drop, {method: 'POST'}));
 </script>
 </body>
 </html>

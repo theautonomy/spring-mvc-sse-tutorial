@@ -2,13 +2,13 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
 <body>
 
-<!-- Returned by POST /step6/jobs. Inserting it opens the job's stream. -->
+<!-- Returned by POST /step6/jobs. The page reads data-events and opens that stream. -->
 <div th:fragment="job" class="border border-gray-200 rounded p-4 space-y-3"
-     hx-ext="sse" th:attr="sse-connect=|/step6/jobs/${jobId}/events|" sse-close="done">
+     th:attr="data-events=|/step6/jobs/${jobId}/events|">
     <p class="text-sm text-gray-700">Deploying <b th:text="${version}">1.0.0</b></p>
-    <ol class="text-sm space-y-1" sse-swap="step" hx-swap="beforeend"></ol>
-    <div id="question" sse-swap="question"></div>
-    <div sse-swap="done"></div>
+    <ol class="text-sm space-y-1" data-steps></ol>
+    <div data-question></div>
+    <div data-done></div>
 </div>
 
 <!-- Data of each "step" event -->
@@ -17,7 +17,7 @@
     <span class="text-xs text-gray-400" th:text="${time}">12:00:00</span>
 </li>
 
-<!-- Data of the "question" event. The buttons answer with a normal POST. -->
+<!-- Data of the "question" event. The page POSTs data-approved to data-answer when a button is clicked. -->
 <div th:fragment="question" class="bg-amber-50 border border-amber-200 rounded p-4 space-y-3">
     <p class="text-sm font-medium text-gray-800">
         Staging looks good. Deploy <b th:text="${version}">1.0.0</b> to production?
@@ -25,11 +25,11 @@
     <p class="text-xs text-gray-500" th:text="|The job waits up to ${timeoutSeconds} s for an answer.|">The job waits…</p>
     <div class="flex gap-2">
         <button class="bg-slate-700 hover:bg-slate-800 text-white px-4 py-1.5 rounded text-sm"
-                th:attr="hx-post=|/step6/jobs/${jobId}/answer|" hx-vals='{"approved": true}' hx-target="#question">
+                th:attr="data-answer=|/step6/jobs/${jobId}/answer|" data-approved="true">
             Approve
         </button>
         <button class="border border-gray-400 bg-white hover:bg-gray-50 px-4 py-1.5 rounded text-sm"
-                th:attr="hx-post=|/step6/jobs/${jobId}/answer|" hx-vals='{"approved": false}' hx-target="#question">
+                th:attr="data-answer=|/step6/jobs/${jobId}/answer|" data-approved="false">
             Reject
         </button>
     </div>

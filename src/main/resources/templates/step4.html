@@ -8,25 +8,23 @@
     <h1 class="text-2xl font-bold text-gray-900">Step 4: A live dashboard</h1>
     <p class="text-gray-700">
         One stream feeds the whole dashboard. The server sends four kinds of events (<code>cpu</code>,
-        <code>memory</code>, <code>orders</code>, <code>log</code>), and each element subscribes to the name it cares about.
+        <code>memory</code>, <code>orders</code>, <code>log</code>), and one listener per name updates its own element.
     </p>
 
-    <!-- One connection for everything inside this div -->
-    <section hx-ext="sse" sse-connect="/step4/stream" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="bg-white rounded-lg border border-gray-200 p-4" sse-swap="cpu">
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white rounded-lg border border-gray-200 p-4" id="cpu">
             <p class="text-sm text-gray-500">CPU…</p>
         </div>
-        <div class="bg-white rounded-lg border border-gray-200 p-4" sse-swap="memory">
+        <div class="bg-white rounded-lg border border-gray-200 p-4" id="memory">
             <p class="text-sm text-gray-500">Memory…</p>
         </div>
         <div class="bg-white rounded-lg border border-gray-200 p-4">
             <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Orders</p>
-            <p class="text-3xl font-bold text-gray-900" sse-swap="orders">0</p>
+            <p class="text-3xl font-bold text-gray-900" id="orders">0</p>
         </div>
         <div class="bg-white rounded-lg border border-gray-200 p-4 sm:col-span-3">
             <p class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Activity</p>
-            <!-- hx-swap="afterbegin": add each "log" event at the top instead of replacing the list -->
-            <ul class="text-sm font-mono text-gray-700 h-48 overflow-auto space-y-1" sse-swap="log" hx-swap="afterbegin"></ul>
+            <ul class="text-sm font-mono text-gray-700 h-48 overflow-auto space-y-1" id="activity"></ul>
         </div>
     </section>
 
@@ -35,10 +33,9 @@
         <ul class="list-disc pl-5 space-y-1">
             <li>The Network tab shows one <code>/step4/stream</code> request, not four. Browsers limit open connections per
                 host (6 over HTTP/1.1), so one stream with named events scales better than one stream per widget.</li>
-            <li><code>sse-swap</code> picks the event name; <code>hx-swap</code> picks how the data is inserted. The gauges replace
-                their content, the activity list prepends.</li>
-            <li>The <code>orders</code> event is plain text, not HTML. htmx swaps whatever data arrives.</li>
-            <li>An element can listen to several names: <code>sse-swap="cpu,memory"</code>.</li>
+            <li>The event name picks the listener; the listener picks how the data goes in. The gauges replace their
+                content (<code>innerHTML</code>), the activity list prepends (<code>insertAdjacentHTML('afterbegin', …)</code>).</li>
+            <li>The <code>orders</code> event is plain text, not HTML, so it goes in with <code>textContent</code>.</li>
         </ul>
     </section>
 
@@ -52,5 +49,15 @@
         <a href="/step5" class="text-blue-700 hover:underline">Next: Step 5 →</a>
     </p>
 </main>
+
+<script>
+    // One connection for the whole dashboard, one listener per event name
+    const es = new EventSource('/step4/stream');
+    es.addEventListener('cpu', e => document.getElementById('cpu').innerHTML = e.data);
+    es.addEventListener('memory', e => document.getElementById('memory').innerHTML = e.data);
+    es.addEventListener('orders', e => document.getElementById('orders').textContent = e.data);
+    // Add each log line at the top instead of replacing the list
+    es.addEventListener('log', e => document.getElementById('activity').insertAdjacentHTML('afterbegin', e.data));
+</script>
 </body>
 </html>

@@ -12,7 +12,7 @@
     </p>
 
     <section class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-        <form hx-post="/step6/jobs" hx-target="#job" hx-swap="innerHTML" class="flex flex-wrap items-end gap-3">
+        <form id="start" class="flex flex-wrap items-end gap-3">
             <div class="flex-1 min-w-48">
                 <label class="block text-xs font-medium text-gray-600 mb-1" for="version">Version to deploy</label>
                 <input id="version" name="version" type="text" value="1.4.2" required
@@ -42,5 +42,39 @@
         <a href="/" class="text-blue-700 hover:underline">Back to the start</a>
     </p>
 </main>
+
+<script>
+    let es; // the stream of the job on screen
+
+    document.getElementById('start').addEventListener('submit', async event => {
+        event.preventDefault();
+        const response = await fetch('/step6/jobs', {method: 'POST', body: new URLSearchParams(new FormData(event.target))});
+        const container = document.getElementById('job');
+        container.innerHTML = await response.text();
+        const job = container.firstElementChild;
+
+        if (es) es.close();
+        const stream = es = new EventSource(job.dataset.events);
+        // Steps are appended; a question (or its "expired" note) replaces the previous one
+        stream.addEventListener('step', e => job.querySelector('[data-steps]').insertAdjacentHTML('beforeend', e.data));
+        stream.addEventListener('question', e => job.querySelector('[data-question]').innerHTML = e.data);
+        stream.addEventListener('done', e => {
+            job.querySelector('[data-done]').innerHTML = e.data;
+            stream.close();
+        });
+    });
+
+    // The question arrives over SSE, but the answer goes back as an ordinary POST.
+    // One listener on #job handles the buttons of every question that will ever be inserted.
+    document.getElementById('job').addEventListener('click', async event => {
+        const button = event.target.closest('[data-answer]');
+        if (!button) return;
+        const response = await fetch(button.dataset.answer, {
+            method: 'POST',
+            body: new URLSearchParams({approved: button.dataset.approved})
+        });
+        button.closest('[data-question]').innerHTML = await response.text();
+    });
+</script>
 </body>
 </html>
