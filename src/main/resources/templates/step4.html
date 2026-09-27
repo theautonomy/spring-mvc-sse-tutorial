@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head('Step 4 · Dashboard')}"></head>
+<body class="bg-gray-100 min-h-screen font-sans">
+<nav th:replace="~{layout :: nav(4)}"></nav>
+
+<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+    <h1 class="text-2xl font-bold text-gray-900">Step 4: A live dashboard</h1>
+    <p class="text-gray-700">
+        One stream feeds the whole dashboard. The server sends four kinds of events (<code>cpu</code>,
+        <code>memory</code>, <code>orders</code>, <code>log</code>), and each element subscribes to the name it cares about.
+    </p>
+
+    <!-- One connection for everything inside this div -->
+    <section hx-ext="sse" sse-connect="/step4/stream" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white rounded-lg border border-gray-200 p-4" sse-swap="cpu">
+            <p class="text-sm text-gray-500">CPU…</p>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 p-4" sse-swap="memory">
+            <p class="text-sm text-gray-500">Memory…</p>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Orders</p>
+            <p class="text-3xl font-bold text-gray-900" sse-swap="orders">0</p>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 p-4 sm:col-span-3">
+            <p class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Activity</p>
+            <!-- hx-swap="afterbegin": add each "log" event at the top instead of replacing the list -->
+            <ul class="text-sm font-mono text-gray-700 h-48 overflow-auto space-y-1" sse-swap="log" hx-swap="afterbegin"></ul>
+        </div>
+    </section>
+
+    <section class="bg-blue-50 border border-blue-200 rounded-lg p-5 text-sm text-gray-800 space-y-2">
+        <h2 class="font-semibold">What to notice</h2>
+        <ul class="list-disc pl-5 space-y-1">
+            <li>The Network tab shows one <code>/step4/stream</code> request, not four. Browsers limit open connections per
+                host (6 over HTTP/1.1), so one stream with named events scales better than one stream per widget.</li>
+            <li><code>sse-swap</code> picks the event name; <code>hx-swap</code> picks how the data is inserted. The gauges replace
+                their content, the activity list prepends.</li>
+            <li>The <code>orders</code> event is plain text, not HTML. htmx swaps whatever data arrives.</li>
+            <li>An element can listen to several names: <code>sse-swap="cpu,memory"</code>.</li>
+        </ul>
+    </section>
+
+    <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
+        <h2 class="font-semibold">Try it with curl</h2>
+        <pre class="bg-gray-100 p-3 rounded text-xs">curl -N http://localhost:8080/step4/stream</pre>
+    </section>
+
+    <p class="text-sm flex justify-between">
+        <a href="/step3" class="text-blue-700 hover:underline">← Step 3</a>
+        <a href="/step5" class="text-blue-700 hover:underline">Next: Step 5 →</a>
+    </p>
+</main>
+</body>
+</html>

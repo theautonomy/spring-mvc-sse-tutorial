@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head('Step 3 · Progress')}"></head>
+<body class="bg-gray-100 min-h-screen font-sans">
+<nav th:replace="~{layout :: nav(3)}"></nav>
+
+<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+    <h1 class="text-2xl font-bold text-gray-900">Step 3: Progress of a long task</h1>
+    <p class="text-gray-700">
+        The form POSTs to <code>/step3/jobs</code>. The server starts the job in the background and answers right away
+        with an HTML fragment. That fragment contains <code>sse-connect</code>, so as soon as htmx inserts it, the browser
+        opens the job's stream and receives <code>progress</code> events until a final <code>done</code> event.
+    </p>
+
+    <section class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+        <form hx-post="/step3/jobs" hx-target="#job" hx-swap="innerHTML" class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-48">
+                <label class="block text-xs font-medium text-gray-600 mb-1" for="task">Task name</label>
+                <input id="task" name="task" type="text" value="Import customers" required
+                       class="border border-gray-300 rounded px-3 py-1.5 text-sm w-full"/>
+            </div>
+            <button type="submit" class="border border-gray-400 bg-white hover:bg-gray-50 px-5 py-1.5 rounded text-sm">Start</button>
+        </form>
+        <p class="text-xs text-gray-500">Tip: a task name containing <code>fail</code> makes the job fail at step 6.</p>
+        <div id="job"></div>
+    </section>
+
+    <section class="bg-blue-50 border border-blue-200 rounded-lg p-5 text-sm text-gray-800 space-y-2">
+        <h2 class="font-semibold">What to notice</h2>
+        <ul class="list-disc pl-5 space-y-1">
+            <li>Two requests: <code>POST /step3/jobs</code> (starts the job, returns HTML) and
+                <code>GET /step3/jobs/{id}/events</code> (the stream). Look at the browser's Network tab.</li>
+            <li>Event data is HTML rendered on the server from Thymeleaf fragments. htmx just swaps it in.</li>
+            <li>The job starts before the browser connects. Early events are not lost: the emitter buffers them
+                until the GET returns it.</li>
+            <li>Success and failure both end with a <code>done</code> event, and the stream has
+                <code>sse-close="done"</code>. Remember step 1: without it the browser would reconnect to a finished job.</li>
+            <li>Start a second job while one is running: the old fragment is replaced, htmx closes its stream, and the
+                server notices at the next <code>send</code>.</li>
+        </ul>
+    </section>
+
+    <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
+        <h2 class="font-semibold">Try it with curl</h2>
+        <pre class="bg-gray-100 p-3 rounded text-xs">curl -s -d task=demo http://localhost:8080/step3/jobs   # copy the job id from sse-connect
+curl -N http://localhost:8080/step3/jobs/&lt;job id&gt;/events</pre>
+    </section>
+
+    <p class="text-sm flex justify-between">
+        <a href="/step2" class="text-blue-700 hover:underline">← Step 2</a>
+        <a href="/step4" class="text-blue-700 hover:underline">Next: Step 4 →</a>
+    </p>
+</main>
+</body>
+</html>

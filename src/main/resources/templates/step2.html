@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head('Step 2 · Clock')}"></head>
+<body class="bg-gray-100 min-h-screen font-sans">
+<nav th:replace="~{layout :: nav(2)}"></nav>
+
+<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+    <h1 class="text-2xl font-bold text-gray-900">Step 2: A ticking clock with htmx</h1>
+    <p class="text-gray-700">
+        Now htmx does the <code>EventSource</code> work. The server pushes a <code>time</code> event every second,
+        and htmx swaps each event's data into the element that asked for it. No JavaScript of our own.
+    </p>
+
+    <section class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+        <!-- hx-ext="sse" turns on the extension, sse-connect opens the stream -->
+        <div hx-ext="sse" sse-connect="/step2/stream">
+            <!-- sse-swap="time": replace my content with the data of every "time" event -->
+            <p class="text-6xl font-mono text-gray-900 text-center" sse-swap="time">--:--:--</p>
+        </div>
+        <pre id="log" class="bg-slate-900 text-green-300 text-xs p-4 rounded h-32 overflow-auto"></pre>
+    </section>
+
+    <section class="bg-blue-50 border border-blue-200 rounded-lg p-5 text-sm text-gray-800 space-y-2">
+        <h2 class="font-semibold">What to notice</h2>
+        <ul class="list-disc pl-5 space-y-1">
+            <li>The whole client is two attributes: <code>sse-connect</code> on a parent and <code>sse-swap="time"</code> on the target.</li>
+            <li>The emitter has a 60 s timeout. Wait a minute: the log below shows the stream end and htmx reconnect.
+                Without an explicit timeout, Tomcat would end it after 30 s.</li>
+            <li>Close this tab and watch the server log: the next <code>send</code> fails, <code>onCompletion</code> runs,
+                and the sending thread stops. Without that cleanup, every visitor would leave a thread behind.</li>
+            <li>Open the page in two tabs: each tab gets its own stream and its own thread.</li>
+        </ul>
+    </section>
+
+    <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
+        <h2 class="font-semibold">Try it with curl</h2>
+        <pre class="bg-gray-100 p-3 rounded text-xs">curl -N http://localhost:8080/step2/stream</pre>
+        <p class="text-gray-600">Every second: <code>event:time</code> and <code>data:12:34:56</code>. Press Ctrl+C to leave, and watch the server log.</p>
+    </section>
+
+    <p class="text-sm flex justify-between">
+        <a href="/step1" class="text-blue-700 hover:underline">← Step 1</a>
+        <a href="/step3" class="text-blue-700 hover:underline">Next: Step 3 →</a>
+    </p>
+</main>
+
+<script>
+    // Only for the demo log: htmx fires these events on the element with sse-connect
+    function log(text) {
+        const el = document.getElementById('log');
+        el.textContent += new Date().toLocaleTimeString() + '  ' + text + '\n';
+        el.scrollTop = el.scrollHeight;
+    }
+    document.body.addEventListener('htmx:sseOpen', () => log('htmx:sseOpen, stream connected'));
+    document.body.addEventListener('htmx:sseError', () => log('htmx:sseError, stream ended or failed, reconnecting'));
+</script>
+</body>
+</html>

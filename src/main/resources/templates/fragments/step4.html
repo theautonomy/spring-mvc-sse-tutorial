@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+
+<!-- Data of the "cpu" and "memory" events -->
+<div th:fragment="gauge">
+    <p class="text-xs font-semibold uppercase tracking-wider text-gray-500" th:text="${label}">CPU</p>
+    <p class="text-3xl font-bold text-gray-900" th:text="|${percent}%|">42%</p>
+    <div class="w-full bg-gray-200 rounded h-2 mt-2 overflow-hidden">
+        <div class="h-2 transition-all duration-500" th:style="|width: ${percent}%|"
+             th:classappend="${percent > 80} ? 'bg-red-500' : 'bg-slate-700'"></div>
+    </div>
+</div>
+
+<!-- Data of each "log" event -->
+<li th:fragment="log-line"><span class="text-gray-400" th:text="${time}">12:00:00</span> <span th:text="${text}">text</span></li>
+
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+
+<!-- Returned by POST /step3/jobs. Inserting it opens the job's stream. -->
+<div th:fragment="job" class="border border-gray-200 rounded p-4 space-y-3"
+     hx-ext="sse" th:attr="sse-connect=|/step3/jobs/${jobId}/events|" sse-close="done">
+    <p class="text-sm text-gray-700">
+        <span class="font-semibold" th:text="${task}">Task</span>
+        <span class="text-xs text-gray-400" th:text="|job ${jobId}|">job id</span>
+    </p>
+    <div sse-swap="progress">
+        <p class="text-sm text-gray-500">Waiting for the first event…</p>
+    </div>
+    <div sse-swap="done"></div>
+</div>
+
+<!-- Sent as the data of each "progress" event -->
+<div th:fragment="progress">
+    <div class="w-full bg-gray-200 rounded h-3 overflow-hidden">
+        <div class="bg-slate-700 h-3 transition-all duration-300" th:style="|width: ${percent}%|"></div>
+    </div>
+    <p class="text-xs text-gray-600 mt-1" th:text="|${message} · ${percent}%|">Step 1 of 10 · 10%</p>
+</div>
+
+<!-- Sent as the data of the "done" event when the job succeeds -->
+<div th:fragment="result" class="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
+    Finished <b th:text="${task}">task</b> at <span th:text="${finishedAt}">12:00:00</span>.
+</div>
+
+<!-- Sent as the data of the "done" event when the job fails -->
+<div th:fragment="error" class="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
+    Job failed: <span th:text="${message}">reason</span>
+</div>
+
+</body>
+</html>

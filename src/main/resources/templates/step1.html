@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head('Step 1 · Hello world')}"></head>
+<body class="bg-gray-100 min-h-screen font-sans">
+<nav th:replace="~{layout :: nav(1)}"></nav>
+
+<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+    <h1 class="text-2xl font-bold text-gray-900">Step 1: Hello world</h1>
+    <p class="text-gray-700">
+        No htmx yet. This page uses the browser's built-in <code>EventSource</code> to read
+        <code>/step1/stream</code>. The server sends one message and a <code>close</code> event, then ends the response.
+    </p>
+
+    <section class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+        <div class="flex flex-wrap gap-2">
+            <button onclick="connect(false)" class="border border-gray-400 bg-white hover:bg-gray-50 px-4 py-1.5 rounded text-sm">
+                Connect (naive)
+            </button>
+            <button onclick="connect(true)" class="border border-gray-400 bg-white hover:bg-gray-50 px-4 py-1.5 rounded text-sm">
+                Connect (handles "close")
+            </button>
+            <button onclick="stop()" class="border border-gray-400 bg-white hover:bg-gray-50 px-4 py-1.5 rounded text-sm">
+                Stop
+            </button>
+        </div>
+        <pre id="log" class="bg-slate-900 text-green-300 text-xs p-4 rounded h-64 overflow-auto"></pre>
+    </section>
+
+    <section class="bg-blue-50 border border-blue-200 rounded-lg p-5 text-sm text-gray-800 space-y-2">
+        <h2 class="font-semibold">What to notice</h2>
+        <ul class="list-disc pl-5 space-y-1">
+            <li><b>Naive:</b> the message number keeps going up. When the server ends the response, <code>EventSource</code>
+                treats it as a dropped connection and reconnects about every 3 seconds. SSE has no "end of stream" message.</li>
+            <li><b>Handles "close":</b> the page listens for the named <code>close</code> event and calls <code>es.close()</code>,
+                so there is exactly one message. Ending a stream is something client and server agree on.</li>
+            <li>Unnamed data arrives in <code>onmessage</code>. Named events need <code>addEventListener('close', …)</code>.</li>
+            <li>Watch the server log: every reconnect is a new request, <code>connection #N</code>.</li>
+        </ul>
+    </section>
+
+    <section class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
+        <h2 class="font-semibold">Try it with curl</h2>
+        <pre class="bg-gray-100 p-3 rounded text-xs">curl -N http://localhost:8080/step1/stream</pre>
+        <p class="text-gray-600">You'll see the raw format: <code>data:Hello, world #1</code>, a blank line, then
+            <code>event:close</code> and <code>data:bye</code>. A blank line ends each event.</p>
+    </section>
+
+    <p class="text-sm"><a href="/step2" class="text-blue-700 hover:underline">Next: Step 2 →</a></p>
+</main>
+
+<script>
+    let es;
+
+    function log(text) {
+        const el = document.getElementById('log');
+        el.textContent += new Date().toLocaleTimeString() + '  ' + text + '\n';
+        el.scrollTop = el.scrollHeight;
+    }
+
+    function connect(handleClose) {
+        stop();
+        log(handleClose ? '--- connecting (handles "close") ---' : '--- connecting (naive) ---');
+        es = new EventSource('/step1/stream');
+        es.onopen = () => log('open');
+        es.onmessage = e => log('message: ' + e.data);
+        if (handleClose) {
+            es.addEventListener('close', e => {
+                log('close event: "' + e.data + '" → es.close()');
+                es.close();
+            });
+        }
+        // readyState 0 = CONNECTING (the browser will retry), 2 = CLOSED (it gave up)
+        es.onerror = () => log('error, readyState=' + es.readyState + (es.readyState === 0 ? ' → reconnecting' : ''));
+    }
+
+    function stop() {
+        if (es) {
+            es.close();
+            es = null;
+            log('--- stopped ---');
+        }
+    }
+</script>
+</body>
+</html>
