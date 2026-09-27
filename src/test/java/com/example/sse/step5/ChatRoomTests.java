@@ -14,11 +14,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ChatRoomTests {
 
-    // Renders a message as its text only, so the tests don't need Thymeleaf
+    // Renders a message as its text only, so the tests don't need jte
     private final FragmentRenderer renderer = new FragmentRenderer(null) {
         @Override
-        public String render(String template, String fragment, Map<String, Object> variables) {
-            return ((ChatRoom.Message) variables.get("message")).text();
+        public String render(String template, Map<String, Object> params) {
+            return (String) params.get("text");
         }
     };
 

@@ -1,10 +1,4 @@
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head th:replace="~{layout :: head('Step 6 · Approval')}"></head>
-<body class="bg-gray-100 min-h-screen font-sans">
-<nav th:replace="~{layout :: nav(6)}"></nav>
-
-<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+@template.layout(title = "Step 6 · Approval", step = 6, content = @`
     <h1 class="text-2xl font-bold text-gray-900">Step 6: Ask the user</h1>
     <p class="text-gray-700">
         A fake deployment runs a few steps, then stops and asks for approval. The question arrives over SSE; your
@@ -41,6 +35,4 @@
         <a href="/step5" class="text-blue-700 hover:underline">← Step 5</a>
         <a href="/" class="text-blue-700 hover:underline">Back to the start</a>
     </p>
-</main>
-</body>
-</html>
+`)

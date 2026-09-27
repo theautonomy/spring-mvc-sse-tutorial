@@ -1,10 +1,4 @@
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head th:replace="~{layout :: head('Home')}"></head>
-<body class="bg-gray-100 min-h-screen font-sans">
-<nav th:replace="~{layout :: nav(0)}"></nav>
-
-<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+@template.layout(title = "Home", step = 0, content = @`
     <h1 class="text-2xl font-bold text-gray-900">Server-Sent Events with Spring MVC and htmx</h1>
     <p class="text-gray-700">
         Server-Sent Events (SSE) let the server push data to the browser over one long HTTP response.
@@ -38,6 +32,4 @@
             <p class="text-sm text-gray-600">Two-way flow: the job pauses, asks a question over SSE, and continues when the answer is posted.</p>
         </li>
     </ol>
-</main>
-</body>
-</html>
+`)

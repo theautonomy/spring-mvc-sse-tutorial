@@ -1,6 +1,6 @@
-# SSE Tutorial (branch `sse-tutorial`)
+# SSE Tutorial (branch `sse-tutorial-jte`)
 
-A step-by-step tutorial for **Server-Sent Events with Spring MVC (`SseEmitter`) and htmx**.
+A step-by-step tutorial for **Server-Sent Events with Spring MVC (`SseEmitter`), htmx and [jte](https://jte.gg) templates**. The `sse-tutorial` branch has the same tutorial with Thymeleaf.
 
 This branch takes the SSE part of the AI Nutrition Planner (on `main`) and teaches it on its own. All AI code and config is removed. What's left is a small Spring Boot app with one page per step, from hello world to a job that pauses to ask the user a question.
 
@@ -30,6 +30,12 @@ Open [http://localhost:8080](http://localhost:8080). If port 8080 is taken:
 
 ```bash
 ./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8081
+```
+
+To edit the jte templates in `src/main/jte` and see changes without restarting, use the `dev` profile:
+
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
 ## Test

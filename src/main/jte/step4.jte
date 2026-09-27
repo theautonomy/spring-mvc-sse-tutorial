@@ -1,17 +1,11 @@
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head th:replace="~{layout :: head('Step 4 · Dashboard')}"></head>
-<body class="bg-gray-100 min-h-screen font-sans">
-<nav th:replace="~{layout :: nav(4)}"></nav>
-
-<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+@template.layout(title = "Step 4 · Dashboard", step = 4, content = @`
     <h1 class="text-2xl font-bold text-gray-900">Step 4: A live dashboard</h1>
     <p class="text-gray-700">
         One stream feeds the whole dashboard. The server sends four kinds of events (<code>cpu</code>,
         <code>memory</code>, <code>orders</code>, <code>log</code>), and each element subscribes to the name it cares about.
     </p>
 
-    <!-- One connection for everything inside this div -->
+    <!-- One connection for everything inside this section -->
     <section hx-ext="sse" sse-connect="/step4/stream" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="bg-white rounded-lg border border-gray-200 p-4" sse-swap="cpu">
             <p class="text-sm text-gray-500">CPU…</p>
@@ -51,6 +45,4 @@
         <a href="/step3" class="text-blue-700 hover:underline">← Step 3</a>
         <a href="/step5" class="text-blue-700 hover:underline">Next: Step 5 →</a>
     </p>
-</main>
-</body>
-</html>
+`)

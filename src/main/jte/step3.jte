@@ -1,10 +1,4 @@
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head th:replace="~{layout :: head('Step 3 · Progress')}"></head>
-<body class="bg-gray-100 min-h-screen font-sans">
-<nav th:replace="~{layout :: nav(3)}"></nav>
-
-<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+@template.layout(title = "Step 3 · Progress", step = 3, content = @`
     <h1 class="text-2xl font-bold text-gray-900">Step 3: Progress of a long task</h1>
     <p class="text-gray-700">
         The form POSTs to <code>/step3/jobs</code>. The server starts the job in the background and answers right away
@@ -30,7 +24,7 @@
         <ul class="list-disc pl-5 space-y-1">
             <li>Two requests: <code>POST /step3/jobs</code> (starts the job, returns HTML) and
                 <code>GET /step3/jobs/{id}/events</code> (the stream). Look at the browser's Network tab.</li>
-            <li>Event data is HTML rendered on the server from Thymeleaf fragments. htmx just swaps it in.</li>
+            <li>Event data is HTML rendered on the server from jte templates. htmx just swaps it in.</li>
             <li>The job starts before the browser connects. Early events are not lost: the emitter buffers them
                 until the GET returns it.</li>
             <li>Success and failure both end with a <code>done</code> event, and the stream has
@@ -50,6 +44,4 @@ curl -N http://localhost:8080/step3/jobs/&lt;job id&gt;/events</pre>
         <a href="/step2" class="text-blue-700 hover:underline">← Step 2</a>
         <a href="/step4" class="text-blue-700 hover:underline">Next: Step 4 →</a>
     </p>
-</main>
-</body>
-</html>
+`)

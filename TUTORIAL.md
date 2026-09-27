@@ -16,10 +16,31 @@ A hands-on tutorial in six steps. Each step is a page in this app with a working
 ```bash
 ./mvnw spring-boot:run          # http://localhost:8080
 ./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8081   # if 8080 is taken
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev                   # edit templates without restarting
 ./mvnw test
 ```
 
-The app needs only `spring-boot-starter-webmvc` and `spring-boot-starter-thymeleaf`. htmx 2.0.3 and its SSE extension 2.2.2 load from a CDN in `templates/layout.html`.
+The app needs only `spring-boot-starter-webmvc` and [jte](https://jte.gg) (`jte` + `jte-spring-boot-starter-4`). htmx 2.0.3 and its SSE extension 2.2.2 load from a CDN in `src/main/jte/layout.jte`.
+
+### Templates: jte
+
+Pages and the HTML sent in SSE events are jte templates in `src/main/jte`. A jte template declares its inputs as typed parameters and uses plain Java expressions:
+
+```
+@param String jobId
+@param String task
+
+<div hx-ext="sse" sse-connect="/step3/jobs/${jobId}/events" sse-close="done">
+    <span>${task}</span>
+</div>
+```
+
+- **Type-safe.** The `jte-maven-plugin` compiles every template to a Java class during the build. A typo or a wrong parameter type fails `./mvnw compile`, just like Java code. At runtime the app uses those precompiled classes (`gg.jte.use-precompiled-templates: true`).
+- **Escaped by default.** In HTML templates, `${...}` output is escaped for where it appears: text, attribute, and so on. Step 5 relies on this.
+- **One template per fragment.** Each piece of HTML that goes out as an event has its own small template, such as `step3/progress.jte` or `step6/question.jte`. Controllers return a template path as the view name (`"step3/job"`), and `FragmentRenderer` renders the same kind of path to a string.
+- **Layout.** Pages call `@template.layout(title = ..., step = ..., content = @`...`)`. `layout.jte` takes a `gg.jte.Content` parameter and puts it in `<main>`.
+- **Comments.** Notes in fragment templates use `<%-- --%>`. Unlike `<!-- -->`, they never reach the browser, so they don't bloat every SSE event.
+- **Dev profile.** With `-Dspring-boot.run.profiles=dev`, jte compiles templates from `src/main/jte` on the fly into `jte-classes/` (gitignored). A template edit shows up on the next request, with no restart.
 
 ## SSE in one minute
 
@@ -69,7 +90,7 @@ SseEmitter stream() throws IOException {
 - `send(Object)` writes an unnamed event. `SseEmitter.event()` builds a full event with `name`, `id`, `reconnectTime` (`retry:`), `comment` and `data`.
 - Sending **before** returning the emitter is fine. The emitter buffers until Spring MVC has set up the response.
 
-**Client** ([step1.html](src/main/resources/templates/step1.html)): plain JavaScript.
+**Client** ([step1.jte](src/main/jte/step1.jte)): plain JavaScript.
 
 ```js
 const es = new EventSource('/step1/stream');
@@ -95,7 +116,7 @@ data:bye
 
 **Goal:** a stream that stays open, and the cleanup it needs.
 
-**Client** ([step2.html](src/main/resources/templates/step2.html)): no JavaScript.
+**Client** ([step2.jte](src/main/jte/step2.jte)): no JavaScript.
 
 ```html
 <div hx-ext="sse" sse-connect="/step2/stream">
@@ -171,7 +192,7 @@ String start(@RequestParam String task, Model model) {
     emitter.onCompletion(() -> emitters.remove(jobId));
     Thread.startVirtualThread(() -> run(jobId, task, emitter));
     model.addAttribute("jobId", jobId);
-    return "fragments/step3 :: job";
+    return "step3/job";                      // renders src/main/jte/step3/job.jte
 }
 
 @GetMapping(path = "/step3/jobs/{jobId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -182,25 +203,33 @@ SseEmitter events(@PathVariable String jobId) {
 }
 ```
 
-**The returned fragment** ([fragments/step3.html](src/main/resources/templates/fragments/step3.html)):
+**The returned fragment** ([step3/job.jte](src/main/jte/step3/job.jte)):
 
-```html
-<div th:fragment="job" hx-ext="sse" th:attr="sse-connect=|/step3/jobs/${jobId}/events|" sse-close="done">
+```
+@param String jobId
+@param String task
+
+<div hx-ext="sse" sse-connect="/step3/jobs/${jobId}/events" sse-close="done">
     <div sse-swap="progress">Waiting for the first event…</div>
     <div sse-swap="done"></div>
 </div>
 ```
 
-**HTML fragments as event data.** The server renders Thymeleaf fragments to strings with [`FragmentRenderer`](src/main/java/com/example/sse/FragmentRenderer.java), and htmx swaps them in. This is hypermedia over SSE: the server decides what the page looks like, and the client stays declarative.
+**HTML fragments as event data.** The server renders jte templates to strings with [`FragmentRenderer`](src/main/java/com/example/sse/FragmentRenderer.java), and htmx swaps them in. This is hypermedia over SSE: the server decides what the page looks like, and the client stays declarative.
 
 ```java
-public String render(String template, String fragment, Map<String, Object> variables) {
-    var context = new Context();
-    context.setVariables(variables);
-    var html = templateEngine.process(template, Set.of(fragment), context);
-    return html.strip().replaceAll("\\s*\\R\\s*", " ");   // one line per event
+public String render(String template, Map<String, Object> params) {
+    var output = new StringOutput();
+    templateEngine.render(template + ".jte", params, output);           // gg.jte.TemplateEngine
+    return output.toString().strip().replaceAll("\\s*\\R\\s*", " ");    // one line per event
 }
+
+// in the job:
+emitter.send(SseEmitter.event().name("progress").data(fragments.render("step3/progress",
+        Map.of("percent", 40, "message", "Step 4 of 10"))));
 ```
+
+The map keys must match the template's `@param` names. A missing parameter fails at render time, so keep the two side by side.
 
 In the SSE format a line break ends a `data:` line, so the renderer puts the HTML on one line. That keeps each event easy to read in `curl -N`.
 
@@ -280,7 +309,8 @@ private void send(SseEmitter emitter, Supplier<SseEventBuilder> event) {
 - **Heartbeats.** A tab that disappears is only noticed at the next `send`. Every 15 s, `@Scheduled heartbeat()` sends a comment (`: ping`). The browser ignores it, but the write finds dead tabs, and proxies don't close a connection that looks idle.
 - **No timeout, on purpose.** Chat streams use `new SseEmitter(0L)` (no timeout), because the heartbeat handles cleanup.
 - **Catching up after a reconnect.** Every message event has an `id`. When the connection drops, the browser reconnects to the same URL and sends a `Last-Event-ID` header with the last id it saw. The controller reads it with `@RequestHeader(name = "Last-Event-ID", required = false) Long lastEventId`, and `join` replays only the newer messages from a 50-message history. The server sends `retry:5000` first, so the browser waits 5 s. Press "Simulate a dropped connection", post from another tab within 5 s, and watch the missed message arrive.
-- **Escape user input.** Anything a user types is sent to every tab. Messages are rendered with `th:text`, which escapes HTML. `th:utext` here would be a stored XSS bug for everyone in the room.
+- **Escape user input.** Anything a user types is sent to every tab. jte escapes every `${...}` in HTML templates, so `<script>` typed into the chat arrives as `&lt;script&gt;`. Using `$unsafe{text}` in `step5/message.jte` would be a stored XSS bug for everyone in the room.
+- **Templates only see public types.** Precompiled templates live in their own package, so they can't use the package-private `ChatRoom.Message` record. `ChatRoom` passes its fields (`id`, `user`, `text`, `time`) as separate parameters instead.
 - **One server only.** The registry lives in memory. With several app instances, each has its own list, so a message posted to instance A never reaches tabs on instance B. Real deployments add a pub/sub layer (Redis, a message broker, Postgres `LISTEN/NOTIFY`) that feeds each instance's local emitters.
 
 ---
@@ -327,7 +357,7 @@ boolean answer(T value) {
 The question is just another HTML fragment. Its buttons post the answer with htmx:
 
 ```html
-<button th:attr="hx-post=|/step6/jobs/${jobId}/answer|" hx-vals='{"approved": true}' hx-target="#question">Approve</button>
+<button hx-post="/step6/jobs/${jobId}/answer" hx-vals='{"approved": true}' hx-target="#question">Approve</button>
 ```
 
 **Lessons:**
@@ -384,7 +414,7 @@ The question is just another HTML fragment. Its buttons post the answer with htm
 
 ## Map to the nutrition planner
 
-The `main` branch uses steps 3 and 6 together:
+The `main` branch uses steps 3 and 6 together. It renders its HTML with Thymeleaf instead of jte, but the SSE side is the same:
 
 | Tutorial | Nutrition planner on `main` |
 | --- | --- |

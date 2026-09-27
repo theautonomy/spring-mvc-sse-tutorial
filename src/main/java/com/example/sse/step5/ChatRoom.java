@@ -113,7 +113,8 @@ class ChatRoom {
     private SseEventBuilder messageEvent(Message message) {
         // The id lets the browser tell us, after a reconnect, which message it saw last
         return SseEmitter.event().id(String.valueOf(message.id())).name("message")
-                .data(fragments.render("fragments/step5", "message", Map.of("message", message)));
+                .data(fragments.render("step5/message", Map.of(
+                        "id", message.id(), "user", message.user(), "text", message.text(), "time", message.time())));
     }
 
     private SseEventBuilder presenceEvent() {

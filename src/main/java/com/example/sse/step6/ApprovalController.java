@@ -61,7 +61,7 @@ class ApprovalController {
 
         model.addAttribute("jobId", jobId);
         model.addAttribute("version", version);
-        return "fragments/step6 :: job";
+        return "step6/job";
     }
 
     @GetMapping(path = "/step6/jobs/{jobId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -80,7 +80,7 @@ class ApprovalController {
         var accepted = job != null && job.approval().answer(approved);
         model.addAttribute("accepted", accepted);
         model.addAttribute("approved", approved);
-        return "fragments/step6 :: answered";
+        return "step6/answered";
     }
 
     private void run(String jobId, String version, Job job) {
@@ -90,14 +90,14 @@ class ApprovalController {
             step(emitter, "Run tests");
             step(emitter, "Deploy to staging");
 
-            emitter.send(SseEmitter.event().name("question").data(fragments.render("fragments/step6", "question",
+            emitter.send(SseEmitter.event().name("question").data(fragments.render("step6/question",
                     Map.of("jobId", jobId, "version", version, "timeoutSeconds", APPROVAL_TIMEOUT.toSeconds()))));
 
             boolean approved;
             try {
                 approved = job.approval().await(APPROVAL_TIMEOUT);
             } catch (TimeoutException e) {
-                emitter.send(SseEmitter.event().name("question").data(fragments.render("fragments/step6", "expired", Map.of())));
+                emitter.send(SseEmitter.event().name("question").data(fragments.render("step6/expired", Map.of())));
                 done(emitter, false, "Nobody approved within %d s, so production was not touched.".formatted(APPROVAL_TIMEOUT.toSeconds()));
                 return;
             }
@@ -120,12 +120,12 @@ class ApprovalController {
 
     private void step(SseEmitter emitter, String name) throws IOException, InterruptedException {
         Thread.sleep(STEP_DURATION);
-        emitter.send(SseEmitter.event().name("step").data(fragments.render("fragments/step6", "step",
+        emitter.send(SseEmitter.event().name("step").data(fragments.render("step6/step",
                 Map.of("name", name, "time", LocalTime.now().truncatedTo(ChronoUnit.SECONDS)))));
     }
 
     private void done(SseEmitter emitter, boolean success, String message) throws IOException {
-        emitter.send(SseEmitter.event().name("done").data(fragments.render("fragments/step6", "done",
+        emitter.send(SseEmitter.event().name("done").data(fragments.render("step6/done",
                 Map.of("success", success, "message", message))));
     }
 }

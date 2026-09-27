@@ -1,0 +1,4 @@
+# Compile templates from src/main/jte on the fly, so edits show up on the next request without a restart
+gg.jte:
+  use-precompiled-templates: false
+  development-mode: true

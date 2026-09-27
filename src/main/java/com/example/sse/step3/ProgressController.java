@@ -60,7 +60,7 @@ class ProgressController {
 
         model.addAttribute("jobId", jobId);
         model.addAttribute("task", task);
-        return "fragments/step3 :: job";
+        return "step3/job";
     }
 
     @GetMapping(path = "/step3/jobs/{jobId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -79,18 +79,18 @@ class ProgressController {
                 if (step == 6 && task.contains("fail")) {
                     throw new JobFailedException("Step 6 failed because the task name contains \"fail\"");
                 }
-                emitter.send(SseEmitter.event().name("progress").data(fragments.render("fragments/step3", "progress",
+                emitter.send(SseEmitter.event().name("progress").data(fragments.render("step3/progress",
                         Map.of("percent", step * 100 / STEPS, "message", "Step %d of %d".formatted(step, STEPS)))));
             }
             // Every way the job can end sends a "done" event. The page has sse-close="done", so htmx closes the
             // EventSource instead of letting the browser reconnect to a job that no longer exists.
-            emitter.send(SseEmitter.event().name("done").data(fragments.render("fragments/step3", "result",
+            emitter.send(SseEmitter.event().name("done").data(fragments.render("step3/result",
                     Map.of("task", task, "finishedAt", LocalTime.now().truncatedTo(ChronoUnit.SECONDS)))));
         } catch (IOException | IllegalStateException e) {
             log.info("Step 3: job {} stopped, the browser went away: {}", jobId, e.toString());
         } catch (JobFailedException | InterruptedException e) {
             log.warn("Step 3: job {} failed: {}", jobId, e.getMessage());
-            sendQuietly(emitter, SseEmitter.event().name("done").data(fragments.render("fragments/step3", "error",
+            sendQuietly(emitter, SseEmitter.event().name("done").data(fragments.render("step3/error",
                     Map.of("message", e.getMessage()))));
         } finally {
             emitter.complete();

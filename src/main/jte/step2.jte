@@ -1,10 +1,4 @@
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head th:replace="~{layout :: head('Step 2 · Clock')}"></head>
-<body class="bg-gray-100 min-h-screen font-sans">
-<nav th:replace="~{layout :: nav(2)}"></nav>
-
-<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+@template.layout(title = "Step 2 · Clock", step = 2, content = @`
     <h1 class="text-2xl font-bold text-gray-900">Step 2: A ticking clock with htmx</h1>
     <p class="text-gray-700">
         Now htmx does the <code>EventSource</code> work. The server pushes a <code>time</code> event every second,
@@ -42,17 +36,15 @@
         <a href="/step1" class="text-blue-700 hover:underline">← Step 1</a>
         <a href="/step3" class="text-blue-700 hover:underline">Next: Step 3 →</a>
     </p>
-</main>
 
-<script>
-    // Only for the demo log: htmx fires these events on the element with sse-connect
-    function log(text) {
-        const el = document.getElementById('log');
-        el.textContent += new Date().toLocaleTimeString() + '  ' + text + '\n';
-        el.scrollTop = el.scrollHeight;
-    }
-    document.body.addEventListener('htmx:sseOpen', () => log('htmx:sseOpen, stream connected'));
-    document.body.addEventListener('htmx:sseError', () => log('htmx:sseError, stream ended or failed, reconnecting'));
-</script>
-</body>
-</html>
+    <script>
+        // Only for the demo log: htmx fires these events on the element with sse-connect
+        function log(text) {
+            const el = document.getElementById('log');
+            el.textContent += new Date().toLocaleTimeString() + '  ' + text + '\n';
+            el.scrollTop = el.scrollHeight;
+        }
+        document.body.addEventListener('htmx:sseOpen', () => log('htmx:sseOpen, stream connected'));
+        document.body.addEventListener('htmx:sseError', () => log('htmx:sseError, stream ended or failed, reconnecting'));
+    </script>
+`)

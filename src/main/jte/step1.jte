@@ -1,10 +1,4 @@
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head th:replace="~{layout :: head('Step 1 · Hello world')}"></head>
-<body class="bg-gray-100 min-h-screen font-sans">
-<nav th:replace="~{layout :: nav(1)}"></nav>
-
-<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+@template.layout(title = "Step 1 · Hello world", step = 1, content = @`
     <h1 class="text-2xl font-bold text-gray-900">Step 1: Hello world</h1>
     <p class="text-gray-700">
         No htmx yet. This page uses the browser's built-in <code>EventSource</code> to read
@@ -46,40 +40,38 @@
     </section>
 
     <p class="text-sm"><a href="/step2" class="text-blue-700 hover:underline">Next: Step 2 →</a></p>
-</main>
 
-<script>
-    let es;
+    <script>
+        let es;
 
-    function log(text) {
-        const el = document.getElementById('log');
-        el.textContent += new Date().toLocaleTimeString() + '  ' + text + '\n';
-        el.scrollTop = el.scrollHeight;
-    }
+        function log(text) {
+            const el = document.getElementById('log');
+            el.textContent += new Date().toLocaleTimeString() + '  ' + text + '\n';
+            el.scrollTop = el.scrollHeight;
+        }
 
-    function connect(handleClose) {
-        stop();
-        log(handleClose ? '--- connecting (handles "close") ---' : '--- connecting (naive) ---');
-        es = new EventSource('/step1/stream');
-        es.onopen = () => log('open');
-        es.onmessage = e => log('message: ' + e.data);
-        if (handleClose) {
-            es.addEventListener('close', e => {
-                log('close event: "' + e.data + '" → es.close()');
+        function connect(handleClose) {
+            stop();
+            log(handleClose ? '--- connecting (handles "close") ---' : '--- connecting (naive) ---');
+            es = new EventSource('/step1/stream');
+            es.onopen = () => log('open');
+            es.onmessage = e => log('message: ' + e.data);
+            if (handleClose) {
+                es.addEventListener('close', e => {
+                    log('close event: "' + e.data + '" → es.close()');
+                    es.close();
+                });
+            }
+            // readyState 0 = CONNECTING (the browser will retry), 2 = CLOSED (it gave up)
+            es.onerror = () => log('error, readyState=' + es.readyState + (es.readyState === 0 ? ' → reconnecting' : ''));
+        }
+
+        function stop() {
+            if (es) {
                 es.close();
-            });
+                es = null;
+                log('--- stopped ---');
+            }
         }
-        // readyState 0 = CONNECTING (the browser will retry), 2 = CLOSED (it gave up)
-        es.onerror = () => log('error, readyState=' + es.readyState + (es.readyState === 0 ? ' → reconnecting' : ''));
-    }
-
-    function stop() {
-        if (es) {
-            es.close();
-            es = null;
-            log('--- stopped ---');
-        }
-    }
-</script>
-</body>
-</html>
+    </script>
+`)

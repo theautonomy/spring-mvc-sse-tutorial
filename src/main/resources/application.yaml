@@ -3,3 +3,6 @@ spring:
   # Each SSE stream in this tutorial is served by a background thread that mostly sleeps or waits.
   # Virtual threads make that cheap, so we don't need to size a thread pool.
   threads.virtual.enabled: true
+
+# Use the templates the jte Maven plugin compiled at build time. Run with the "dev" profile to edit them live.
+gg.jte.use-precompiled-templates: true

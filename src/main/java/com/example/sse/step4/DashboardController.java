@@ -72,11 +72,11 @@ class DashboardController {
     }
 
     private String gauge(String label, int percent) {
-        return fragments.render("fragments/step4", "gauge", Map.of("label", label, "percent", percent));
+        return fragments.render("step4/gauge", Map.of("label", label, "percent", percent));
     }
 
     private String logLine(String text) {
-        return fragments.render("fragments/step4", "log-line",
+        return fragments.render("step4/logLine",
                 Map.of("time", LocalTime.now().truncatedTo(ChronoUnit.SECONDS), "text", text));
     }
 
