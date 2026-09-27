@@ -150,7 +150,7 @@ return emitter;
 
 ## Step 3: Progress of a long task
 
-**Goal:** the pattern the nutrition planner uses for `POST /plan`.
+**Goal:** start a long job with a POST and stream its progress to the page.
 
 ```mermaid
 sequenceDiagram
@@ -239,7 +239,7 @@ In the SSE format a line break ends a `data:` line, so the renderer puts the HTM
 
 - **Early events aren't lost.** The job starts before the browser connects. `SseEmitter` buffers sends until the GET handler returns it. Try it: `curl -d task=x …/step3/jobs`, wait 2 s, then `curl -N` the events URL. You still get step 1.
 - **Every ending sends the closing event.** Success sends `done` with the result, and failure sends `done` with an error fragment. On `done` the page calls `stream.close()`. Without it you'd hit step 1's reconnect loop, and the reconnect would get a 404, because `onCompletion` already removed the job.
-- **Errors are content.** A failed job doesn't break the stream. It sends a friendly error fragment, like the planner's `failInteraction`.
+- **Errors are content.** A failed job doesn't break the stream. It sends a friendly error fragment as its last event.
 - **Removing HTML does not close a stream.** An `EventSource` lives until you call `close()` (or the page unloads), even if the elements it updates are gone. That's why the page closes the previous job's stream before it opens the next one. Start a second job while one runs and watch the Network tab: the old request ends.
 - **Leaks.** If nobody ever connects, the emitter sits in the map until its 5-minute timeout. Always give job emitters a timeout.
 
@@ -317,7 +317,7 @@ private void send(SseEmitter emitter, Supplier<SseEventBuilder> event) {
 
 ## Step 6: Ask the user
 
-**Goal:** a two-way conversation over a one-way channel. This is the nutrition planner's human-in-the-loop flow.
+**Goal:** a two-way conversation over a one-way channel: a human-in-the-loop flow.
 
 ```mermaid
 sequenceDiagram
@@ -618,21 +618,3 @@ They live in an `InMemoryUserDetailsManager` with plain-text (`{noop}`) password
 - **Connection limit.** About 6 per host over HTTP/1.1, shared across tabs. Prefer one stream per page, or HTTP/2.
 - **Auth.** `EventSource` sends cookies but can't set custom headers. Session cookies work; bearer tokens in headers don't. See [Security](#security).
 - **Many instances.** In-memory registries (step 5) and job maps (steps 3 and 6) only work with one instance, or with sticky sessions. Use pub/sub or shared storage to scale out.
-
----
-
-## Map to the nutrition planner
-
-The `main` branch uses steps 3 and 6 together. It uses htmx for the browser side, so its attributes replace the JavaScript you wrote here:
-
-| Tutorial | Nutrition planner on `main` |
-| --- | --- |
-| `ProgressController.start` returns a fragment with `data-events` | `NutritionPlannerUiController.createPlan` → `SseInteractionController.eventStream` → `fragments/events` |
-| `emitters` map + `GET …/{id}/events` | `SseInteractionController.emitters` + `GET /interactions/{id}/events` |
-| `FragmentRenderer.render` | `SseInteractionController.sendEvent` (`TemplateEngine.process`) |
-| Error fragment as the last event | `failInteraction` → `fragments/error` |
-| `PendingQuestion` | `AskUserQuestionHandler` (5-minute `CompletableFuture`) |
-| Question fragment, answers posted with `fetch` | `fragments/hitl` → `POST /interaction/{id}/answers` → `provideAnswers` |
-| `stream.close()` on `done` | Not used there: the planner calls `emitter.complete()`, and `index.html` re-enables the button on `htmx:sseClose` / `htmx:sseError` |
-
-The last row is worth a look after step 1: without a closing event the browser tries to reconnect to a finished interaction. The planner's emitter is gone by then, so the reconnect fails, and the page reacts to the resulting `htmx:sseError`.
