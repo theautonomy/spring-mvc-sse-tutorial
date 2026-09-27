@@ -29,13 +29,13 @@ class SseTutorialApplicationTests {
     MockMvc mvc;
 
     @ParameterizedTest
-    @ValueSource(strings = {"/", "/step1", "/step2", "/step3", "/step5", "/step7"})
+    @ValueSource(strings = {"/", "/step1", "/step2", "/step3", "/step5", "/step7", "/step8"})
     void userPagesRender(String path) throws Exception {
         mvc.perform(get(path)).andExpect(status().isOk());
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/", "/step1", "/step2", "/step3", "/step4", "/step5", "/step6", "/step7"})
+    @ValueSource(strings = {"/", "/step1", "/step2", "/step3", "/step4", "/step5", "/step6", "/step7", "/step8"})
     @WithMockUser(username = "admin", roles = {"USER", "ADMIN"})
     void adminSeesEveryPage(String path) throws Exception {
         mvc.perform(get(path)).andExpect(status().isOk());

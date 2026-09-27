@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head('Step 8 · Jobs')}"></head>
+<body class="bg-gray-100 min-h-screen font-sans">
+<nav th:replace="~{layout :: nav(8)}"></nav>
+
+<main class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+    <h1 class="text-2xl font-bold text-gray-900">Step 8: The pipeline, for real</h1>
+    <p class="text-gray-700">
+        Step 7's pipeline with what a real application needs. The job's state lives in the database, and the stream
+        only reports what's there. Batches are transactions and get retried, the database gets at most a few batches at
+        a time, and a job can be cancelled or time out. A job that doesn't finish leaves no records behind.
+    </p>
+
+    <section class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+        <form id="start" class="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <button type="submit" class="border border-gray-400 bg-white hover:bg-gray-50 px-5 py-1.5 rounded text-sm">Start</button>
+            <label class="text-sm text-gray-700 flex items-center gap-1.5"><input type="radio" name="mode" value="NONE" checked/> Normal</label>
+            <label class="text-sm text-gray-700 flex items-center gap-1.5"><input type="radio" name="mode" value="FAIL_ONCE"/> Batch 3 fails once</label>
+            <label class="text-sm text-gray-700 flex items-center gap-1.5"><input type="radio" name="mode" value="FAIL_ALWAYS"/> Batch 3 always fails</label>
+            <label class="text-sm text-gray-700 flex items-center gap-1.5"><input type="radio" name="mode" value="SLOW"/> Slow database (times out)</label>
+        </form>
+        <!-- th:block: th:replace runs before th:if on the same element, so the condition needs its own element -->
+        <div id="job"><th:block th:if="${jobId}"><div th:replace="~{fragments/step8 :: shell}"></div></th:block></div>
+    </section>
+
+    <section th:unless="${recent.isEmpty()}" class="bg-white rounded-lg border border-gray-200 p-5 text-sm space-y-2">
+        <h2 class="font-semibold">Your recent jobs</h2>
+        <p class="text-xs text-gray-500">Read from the <code>jobs</code> table. Open one to reconnect to it, even while it runs.</p>
+        <ul class="space-y-1">
+            <li th:each="j : ${recent}" class="flex gap-3 text-xs">
+                <a th:href="@{/step8(job=${j.id})}" class="text-blue-700 hover:underline font-mono" th:text="${#strings.substring(j.id, 0, 8)}">1234abcd</a>
+                <span th:text="${j.status}">DONE</span>
+                <span class="text-gray-500" th:text="${j.failureMode}">NONE</span>
+                <span class="text-gray-400" th:text="${#temporals.format(j.createdAt, 'HH:mm:ss')}">12:00:00</span>
+            </li>
+        </ul>
+    </section>
+
+    <section class="bg-blue-50 border border-blue-200 rounded-lg p-5 text-sm text-gray-800 space-y-2">
+        <h2 class="font-semibold">What to notice</h2>
+        <ul class="list-disc pl-5 space-y-1">
+            <li>Reload the page while a job runs, or open it in a second tab: the job is still there with its
+                current progress. The address bar has <code>?job=…</code>, and the stream reads the state from the database.</li>
+            <li>Six batches, but only three insert at once. The others wait. Start two jobs in two tabs: they share
+                the same three slots, because the limit protects the database, not one job.</li>
+            <li>"Fails once": batch 3's transaction rolls back and the batch starts again (try 2). The job still ends
+                with exactly 600 records.</li>
+            <li>"Always fails": after the second try the job asks every other batch to stop, waits until they have,
+                then deletes every record it inserted.</li>
+            <li>"Slow database" runs into the 20 s timeout. Cancel does the same thing on demand. Both only ask the
+                threads to stop; they notice between chunks.</li>
+            <li>Log in as bob and open alice's <code>?job=…</code> link: it isn't found. Jobs belong to their owner.</li>
+        </ul>
+    </section>
+
+    <p class="text-sm flex justify-between">
+        <a href="/step7" class="text-blue-700 hover:underline">← Step 7</a>
+        <a href="/" class="text-blue-700 hover:underline">Back to the start</a>
+    </p>
+</main>
+
+<script>
+    const container = document.getElementById('job');
+    let es;
+
+    // Shows a job: the shell says where its stream is; the stream sends the job's state until it's finished
+    function watch(shell) {
+        if (es) es.close();
+        history.replaceState(null, '', shell.dataset.page); // a reload comes back to this job
+        const stream = es = new EventSource(shell.dataset.events);
+        stream.addEventListener('state', e => shell.innerHTML = e.data);
+        stream.addEventListener('done', e => {
+            shell.innerHTML = e.data;
+            stream.close();
+        });
+        // No onerror handling needed: after a dropped connection the browser reconnects, and the first event it
+        // gets is the current state
+    }
+
+    document.getElementById('start').addEventListener('submit', async event => {
+        event.preventDefault();
+        const response = await fetch('/step8/jobs', {method: 'POST', headers: csrfHeaders(), body: new URLSearchParams(new FormData(event.target))});
+        container.innerHTML = await response.text();
+        watch(container.firstElementChild);
+    });
+
+    // The Cancel button arrives inside the streamed state, so listen on the container
+    container.addEventListener('click', event => {
+        const button = event.target.closest('[data-cancel]');
+        if (button) {
+            button.disabled = true;
+            fetch(button.dataset.cancel, {method: 'POST', headers: csrfHeaders()});
+        }
+    });
+
+    // Opened as /step8?job=…: the server already rendered the shell
+    if (container.firstElementChild) watch(container.firstElementChild);
+</script>
+</body>
+</html>

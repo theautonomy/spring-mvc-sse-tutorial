@@ -17,6 +17,7 @@ The browser side uses no framework. The `sse-tutorial` branch teaches the same s
 | 5 | `/step5` | A chat room: broadcast, heartbeats, `Last-Event-ID` catch-up |
 | 6 | `/step6` | Ask the user: two-way flow over SSE + POST (admin) |
 | 7 | `/step7` | Actions that depend on each other: parallel database inserts, then processing |
+| 8 | `/step8` | The pipeline for real use: job state in the database, reload-proof stream, retries, limits, cancel, timeout |
 
 ## Prerequisites
 

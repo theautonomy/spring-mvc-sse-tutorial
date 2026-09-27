@@ -1,6 +1,6 @@
 # Server-Sent Events with Spring MVC and plain JavaScript
 
-A hands-on tutorial in seven steps. Each step is a page in this app with a working example, and each one adds one idea to the one before it. By the end you'll have built every SSE pattern the nutrition planner (on `main`) uses: streaming progress, HTML fragments as events, and pausing a job to ask the user a question.
+A hands-on tutorial in eight steps. Each step is a page in this app with a working example, and each one adds one idea to the one before it. By the end you'll have built every SSE pattern the nutrition planner (on `main`) uses: streaming progress, HTML fragments as events, and pausing a job to ask the user a question.
 
 The browser side uses no framework, only `EventSource` and `fetch`. Every line that talks to the server is on the page, so you can see exactly what a library like htmx would otherwise do for you. (The `sse-tutorial` branch has the same steps written with htmx.)
 
@@ -13,6 +13,7 @@ The browser side uses no framework, only `EventSource` and `fetch`. Every line t
 | 5 | [/step5](http://localhost:8080/step5) | Broadcast to many tabs, dead-client cleanup, heartbeats, event ids, catch-up after reconnect |
 | 6 | [/step6](http://localhost:8080/step6) | Two-way: pause a job, ask over SSE, continue on POST (admin only) |
 | 7 | [/step7](http://localhost:8080/step7) | Actions that depend on each other: parallel inserts into a database, then processing, chained with `CompletableFuture` |
+| 8 | [/step8](http://localhost:8080/step8) | Step 7 for real use: job state in the database, a stream that survives reloads, transactional retries, a concurrency limit, cancel, timeout, cleanup |
 | | [What runs on which thread](#what-runs-on-which-thread) | Servlet async behind `SseEmitter`, who calls `send`, what "async" doesn't mean |
 | | [Security](#security) | Protecting pages and streams with Spring Security, USER and ADMIN roles, CSRF for `fetch` |
 
@@ -26,7 +27,7 @@ The browser side uses no framework, only `EventSource` and `fetch`. Every line t
 
 Log in as **alice**, **bob** or **admin**, all with the password `password`. Every page and stream needs a login, and steps 4 and 6 need the ADMIN role (see [Security](#security)).
 
-The app needs only `spring-boot-starter-webmvc`, `spring-boot-starter-thymeleaf` and `spring-boot-starter-security`, plus `spring-boot-starter-jdbc` and an in-memory H2 database for step 7. The only thing loaded from a CDN is Tailwind, for styling (`templates/layout.html`). Each page's JavaScript is a small inline `<script>`.
+The app needs only `spring-boot-starter-webmvc`, `spring-boot-starter-thymeleaf` and `spring-boot-starter-security`, plus `spring-boot-starter-jdbc` and an in-memory H2 database for steps 7 and 8. The only thing loaded from a CDN is Tailwind, for styling (`templates/layout.html`). Each page's JavaScript is a small inline `<script>`.
 
 ## SSE in one minute
 
@@ -438,6 +439,59 @@ The executor is `Executors.newVirtualThreadPerTaskExecutor()`: the threads mostl
 
 ---
 
+## Step 8: The pipeline, for real
+
+**Goal:** take step 7's pipeline to what a real application needs, and see how that changes the SSE side.
+
+Step 7 kept everything in memory: the emitter map, the progress counters, the future chain. That's fine for one tab on one server that never restarts. Step 8 keeps the same two actions (insert in parallel batches, then process) and changes the rest. The code is in [`JobRunner`](src/main/java/com/example/sse/step8/JobRunner.java) (the work), [`JobStore`](src/main/java/com/example/sse/step8/JobStore.java) (all state, in the `jobs` and `job_batches` tables) and [`JobController`](src/main/java/com/example/sse/step8/JobController.java) (the web side).
+
+| Concern | Step 7 | Step 8 |
+| --- | --- | --- |
+| Job state | Memory | `jobs` and `job_batches` tables |
+| Who sends events | The worker threads | The stream reads the job's row and sends it when it changed |
+| Reload, second tab, dropped connection | Lost | Same job, current state (`?job=…` in the address bar) |
+| Inserts | One `INSERT` per row | `batchUpdate`, one transaction per batch |
+| A batch fails | Job fails, rows stay | Rolled back and retried once. If it fails again, the job stops and deletes its rows |
+| Parallel batches | All at once | At most 3 at a time, across all jobs (a `Semaphore`) |
+| Cancel / timeout | None | Cancel button, 20 s deadline |
+| Server restart | Jobs vanish | Unfinished jobs are marked failed at startup |
+| Who can see a job | Anyone with the id | Only its owner |
+
+**The stream is a view of the database.** This is the biggest change for SSE:
+
+```java
+while (open.get()) {
+    var job = store.find(jobId, owner).orElseThrow();
+    var html = render(job);
+    if (job.status().finished()) {
+        emitter.send(SseEmitter.event().name("done").data(html));
+        emitter.complete();
+        return;
+    }
+    if (!html.equals(sent)) {                    // only send what changed
+        emitter.send(SseEmitter.event().name("state").data(html));
+        sent = html;
+    }
+    Thread.sleep(POLL_INTERVAL);                 // 250 ms
+}
+```
+
+The workers never touch an emitter; they only write to the database. So a stream can start at any time, from any tab, and on any server instance that shares the database, and it shows the truth. The page puts `?job=…` in the address bar with `history.replaceState`, so a reload reconnects to the same job. When a connection drops, the browser reconnects by itself and the first event it gets is the current state, so nothing needs `Last-Event-ID`. The price is one small query per open stream every 250 ms. At larger scale you'd replace the polling with a notification (Postgres `LISTEN/NOTIFY`, Redis pub/sub) that tells the stream when to read.
+
+**Lessons:**
+
+- **Transactions make retries safe.** Each batch is one transaction. If attempt 1 fails halfway, its 50 rows roll back and attempt 2 starts from a clean slate. "Batch 3 fails once" still ends with exactly 600 records, and a test checks that.
+- **Progress must commit on its own.** A batch's rows stay invisible until its transaction commits, and so would its progress counter if it were written in the same transaction. So `setInserted` runs in a `REQUIRES_NEW` transaction and is visible at once.
+- **So must a stop request, and a real run found that.** The timeout check often runs inside a batch's transaction. The first version wrote "stop: TIMEOUT" there. The batch then stopped, its transaction rolled back, and the stop request was rolled back with it. The job still stopped, but the reason was lost. Now `requestStop` commits in its own transaction, and `JobTimeoutTests` recreates that exact situation. Any status you write from inside a transaction that's about to fail needs its own transaction.
+- **Limit what the database gets, not what one job does.** Virtual threads are free, but connections aren't: the pool has 10. A `Semaphore` with 3 permits, shared by all jobs, keeps the database from being flooded. Start jobs in two tabs and watch them take turns. The permit is taken before the transaction starts and released after it ends.
+- **Stopping is cooperative.** `CompletableFuture.cancel()` and `orTimeout()` only mark the future as done, and the threads keep inserting. So cancel, the timeout and a failed batch all do the same thing: set `stop_requested` on the job. Every thread checks it between chunks and throws `JobStopped`, which rolls back its open transaction. The first reason wins, so a cancel right after a failure doesn't turn the failure into "cancelled".
+- **Clean up only after everything has stopped.** `allOf` waits for every batch, even after one failed. So `finish` runs only once no thread of the job is still writing, and deleting the job's records can't race with a late insert. The job is all or nothing: finished and processed, or no records at all.
+- **Jobs belong to someone.** Every query has `AND owner = ?`. Someone else's job gets the same 404 as a job that doesn't exist, so the answer doesn't reveal that the id is valid.
+- **Plan for the crash.** With a database that survives restarts, a job that was running when the server died would say `INSERTING` forever. At startup, `failJobsLeftByAPreviousRun` marks such jobs failed and deletes their records. (With this tutorial's in-memory H2 there's nothing to sweep, but the code is what you'd need with Postgres.)
+- **Still missing for production:** deleting old jobs after a while, a job queue so work survives a restart instead of being failed, and a pub/sub notification instead of polling.
+
+---
+
 ## What runs on which thread
 
 **Goal:** see what "async" means for an `SseEmitter`, now that you've seen all the patterns.
@@ -461,6 +515,7 @@ The tests check step 2 with `request().asyncStarted()`.
 | 5 | The request thread of whoever posts a message (the broadcast), and the `@Scheduled` heartbeat thread |
 | 6 (answer) | The POST thread completes the `CompletableFuture`. The job thread wakes up and does the sending. |
 | 7 | Four insert threads at once (one per batch), then one processing thread. The POST thread only chains the futures. |
+| 8 | Nobody sends from the workers. One virtual thread per open stream reads the job's row every 250 ms and sends it when it changed. |
 
 **What "async" doesn't mean:**
 
