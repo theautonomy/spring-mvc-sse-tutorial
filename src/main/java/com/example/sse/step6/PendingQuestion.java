@@ -9,7 +9,6 @@ import java.util.concurrent.TimeoutException;
 /**
  * Step 6: lets a background job wait for an answer that arrives later, in a separate HTTP request.
  * The job thread calls {@link #await}; the controller that receives the answer calls {@link #answer}.
- * This is the same idea as {@code AskUserQuestionHandler} in the nutrition planner.
  */
 final class PendingQuestion<T> {
 
