@@ -2,9 +2,9 @@
 
 A step-by-step tutorial for **Server-Sent Events with Spring MVC (`SseEmitter`) and plain JavaScript (`EventSource`, `fetch`)**.
 
-This branch takes the SSE part of the AI Nutrition Planner (on `main`) and teaches it on its own. All AI code and config is removed. What's left is a small Spring Boot app with one page per step, from hello world to a job that pauses to ask the user a question.
+The purpose of this repo is to demo SSE with Spring MVC. It is a small Spring Boot app with one page per step, from hello world to a job that pauses to ask the user a question.
 
-The browser side uses no framework. The `sse-tutorial` branch teaches the same steps with htmx and its SSE extension.
+The browser side uses no framework.
 
 ➡️ **Start with [TUTORIAL.md](TUTORIAL.md).**
 
