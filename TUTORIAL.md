@@ -1,6 +1,6 @@
 # Server-Sent Events with Spring MVC and plain JavaScript
 
-A hands-on tutorial in eight steps. Each step is a page in this app with a working example, and each one adds one idea to the one before it. By the end you'll have built every SSE pattern the nutrition planner (on `main`) uses: streaming progress, HTML fragments as events, and pausing a job to ask the user a question.
+A hands-on tutorial in eight steps. Each step is a page in this app with a working example, and each one adds one idea to the one before it. By the end you'll have built an application with SSE patterns: streaming progress, HTML fragments as events, and pausing a job to ask the user a question.
 
 The browser side uses no framework, only `EventSource` and `fetch`. Every line that talks to the server is on the page, so you can see exactly what a library like htmx would otherwise do for you. (The `sse-tutorial` branch has the same steps written with htmx.)
 
